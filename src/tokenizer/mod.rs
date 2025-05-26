@@ -18,6 +18,11 @@ pub struct Tokenizer {
     index: u64
 }
 
+enum CommentType {
+    Line,
+    Block
+}
+
 impl Tokenizer {
     pub fn new(input: String) -> Self {
         Tokenizer {
@@ -94,6 +99,32 @@ impl Tokenizer {
                 });
             }
             else if char.is_whitespace() {}
+            else if char == '/' /* comment checking - division not implemented yet */ {
+                if let None = self.peek(0) {
+                    println!("ERROR: unexpected characater '/'");
+                    exit(7);
+                }
+                let next = self.consume(0).unwrap();
+                let mut comment_type: CommentType = CommentType::Line;
+                if next == '/' {}
+                else if next == '*' {comment_type = CommentType::Block;}
+                else {
+                    println!("ERROR: unexpected '{}' character after comment initializer (expected * or /)", next);
+                    exit(7);
+                }
+                if let CommentType::Line = comment_type {
+                    while self.consume(0).unwrap_or('\n') != '\n' {}
+                }
+                else if let CommentType::Block = comment_type {
+                    let mut previous: char = '*';
+                    while let Some(char) = self.consume(0) {
+                        if format!("{}{}", previous, char) == "*/" {
+                            break;
+                        }
+                        previous = char;
+                    }
+                }
+            }
             else {
                 println!("ERROR: Unexpected character: {}", char);
                 exit(7);
