@@ -66,7 +66,7 @@ impl Compiler {
     pub fn ln(&mut self, line: &str) {
         self.asm.entry.push_str(&format!("{}{}\n", " ".repeat(self.indent + 8), line));
     }
-    pub fn compile(&mut self, timestamp: bool) -> String {
+    pub fn compile(&mut self) -> String {
         for i in 0..self.input.len() {
             let ast = &self.input[i];
             let nodes = ast.children.clone();

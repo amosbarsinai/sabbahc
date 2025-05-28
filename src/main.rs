@@ -18,7 +18,6 @@ Options:
   -m, --mode <mode>       Manually specify the output mode
   -v, --version           Show version information and exit
   -h, --help              Show this help message and exit
-  -t, --timestamp         Add a trailing timestamp comment in the compiled code
   -f, --force             Ignore nonfatal errors
 
 Description:
@@ -46,7 +45,6 @@ struct CLIInstructions {
     input: String,
     output: String,
     mode: OutputMode,
-    timestamp: bool,
     exit_early: Option<EarlyExit>,
     force: bool,
 }
@@ -56,7 +54,6 @@ impl CLIInstructions {
         let mut input: String = args[1].clone();
         let mut output: String = String::new();
         let mut mode: OutputMode = OutputMode::BinaryExecutable;
-        let mut timestamp: bool = false;
         let mut exit_early: Option<EarlyExit> = None;
         let mut force: bool = false;
         let mut i = 1 /* skip commmand */;
@@ -100,9 +97,6 @@ impl CLIInstructions {
                                 exit(5);
                             }
                         }
-                        "-t" | "--timestamp" => {
-                            timestamp = true;
-                        }
                     _ => {
                         if i == 1 { // First argument is input file
                             input = args[i].clone();
@@ -138,7 +132,6 @@ impl CLIInstructions {
         input: input,
         output: output,
         mode: mode,
-        timestamp: timestamp,
         exit_early: exit_early,
         force: force,
     }
@@ -197,7 +190,7 @@ fn main() {
     let mut parser = parser::Parser::new(tokenized);
     let parsed: Vec<parser::Ast> = parser.parse();
     let mut compiler = compiler::Compiler::new(parsed);
-    let compiled: String = compiler.compile(instructions.timestamp);
+    let compiled: String = compiler.compile();
 
     match instructions.mode {
         OutputMode::Assembly => {
