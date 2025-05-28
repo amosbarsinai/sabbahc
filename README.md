@@ -22,4 +22,4 @@ Description:
 Examples:
   sabbahc main.sabbah         # Compile and link (default output: <filename>.out)
   sabbahc main.sabbah -o prog # Compile and link, output to 'prog'
-  sabbahc main.sabbah -s      # Compile to Assembly only```
+  sabbahc main.sabbah -s      # Compile to Assembly only
