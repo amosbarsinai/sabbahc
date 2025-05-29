@@ -5,6 +5,7 @@ use std::io::Write;
 mod tokenizer;
 mod parser;
 mod compiler;
+mod typing;
 
 const HELP: &str = "sabbahc - cli for the Sabbah language
 

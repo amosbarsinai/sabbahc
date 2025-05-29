@@ -1,10 +1,13 @@
 use std::process::exit;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TokenType {
     ExitStatement,
     IntegerLiteral,
     Semicolon,
+    LetKeyword,
+    Identifier,
+    Assigner,
 }
 
 #[derive(Debug)]
@@ -70,6 +73,24 @@ impl Tokenizer {
                     tokens.push(Token {
                         token_type: TokenType::ExitStatement,
                         value: None
+                    })
+                }
+                else if current == "let" {
+                    tokens.push(Token {
+                        token_type: TokenType::LetKeyword,
+                        value: None
+                    });
+                }
+                else if current == "=" {
+                    tokens.push(Token {
+                        token_type: TokenType::Assigner,
+                        value: None
+                    });
+                }
+                else if current.chars().all(|c| c.is_alphabetic() || c == '_') {
+                    tokens.push(Token {
+                        token_type: TokenType::Identifier,
+                        value: Some(current)
                     })
                 }
                 else {
