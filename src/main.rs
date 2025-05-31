@@ -61,6 +61,7 @@ impl CLIInstructions {
         let mut exit_early: Option<EarlyExit> = None;
         let mut force: bool = false;
         let mut i = 1 /* skip commmand */;
+        let mut input_set: bool = false;
         while i < args.len() {
             match args[i].as_str() {
                         "-h" | "--help" => {
@@ -102,12 +103,16 @@ impl CLIInstructions {
                             }
                         }
                     _ => {
-                        if i == 1 { // First argument is input file
+                        if !input_set {
                             input = args[i].clone();
+                            input_set = true;
                         }
                         else if args[i].starts_with("-") {
                             println!("ERROR: Unrecognized flag/option: {}", args[i]);
                             exit(2);
+                        }
+                        else {
+                            println!("ERROR: Unexpected argument: {}", args[i]);
                         }
                     }
             }
