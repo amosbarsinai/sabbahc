@@ -205,21 +205,26 @@ fn main() {
         OutputMode::Assembly => {
             let mut output = std::fs::File::create(instructions.output.clone()).unwrap();
             output.write_all(compiled.as_bytes()).unwrap();
+            println!("Successfully compiled to file \"{}\"", instructions.output.clone());
         }
         OutputMode::Object => {
             let asm_output = find_empty_temp_filename();
             let mut asm_file = std::fs::File::create(asm_output.clone()).unwrap();
             asm_file.write_all(compiled.as_bytes()).unwrap();
             let object_output = instructions.output.clone();
-            let assembler_output = Command::new("nasm")
-                .arg("-felf64")
-                .arg(format!("{}", asm_output))
+            let assembler_output = Command::new("gcc")
                 .arg("-o")
-                .arg(format!("{}", object_output))
+                .arg(format!("{}", instructions.output.clone()))
+                .arg("-x")
+                .arg("assembler")
+                .arg("-nostdlib")
+                .arg("-static")
+                .arg("-c")
+                .arg(format!("{}", asm_output))
                 .output()
                 .expect("Failed to execute assembler!");
             if assembler_output.status.success() {
-                println!("Successfully assembled to {}", object_output);
+                println!("Successfully assembled to file \"{}\"", object_output);
             } else {
                 println!("Assembler failed with error: {}", String::from_utf8_lossy(&assembler_output.stderr));
                 exit(11);
@@ -230,34 +235,23 @@ fn main() {
             let asm_output = find_empty_temp_filename();
             let mut asm_file = std::fs::File::create(asm_output.clone()).unwrap();
             asm_file.write_all(compiled.as_bytes()).unwrap();
-            let object_output = find_empty_temp_filename();
-            let assembler_output = Command::new("nasm")
-                .arg("-felf64")
-                .arg(format!("{}", asm_output))
+            let assembler_output = Command::new("gcc")
                 .arg("-o")
-                .arg(format!("{}", object_output))
+                .arg(format!("{}", instructions.output.clone()))
+                .arg("-x")
+                .arg("assembler")
+                .arg("-nostdlib")
+                .arg("-static")
+                .arg(format!("{}", asm_output))
                 .output()
                 .expect("Failed to execute assembler!");
             if assembler_output.status.success() {
-                println!("Successfully assembled to {}", object_output);
+                println!("Successfully compiled to file \"{}\"", instructions.output.clone());
             } else {
                 println!("Assembler failed with error: {}", String::from_utf8_lossy(&assembler_output.stderr));
                 exit(11);
             }
-            let linker_output = Command::new("ld")
-                .arg(format!("{}", object_output))
-                .arg("-o")
-                .arg(format!("{}", instructions.output))
-                .output()
-                .expect("Failed to execute linker!");
-            if linker_output.status.success() {
-                println!("Successfully linked to {}", instructions.output);
-            } else {
-                println!("Linker failed with error: {}", String::from_utf8_lossy(&linker_output.stderr));
-                exit(10);
-            }
             std::fs::remove_file(asm_output).expect("Failed to remove temporary asm file");
-            std::fs::remove_file(object_output).expect("Failed to remove temporary object file");
         }
     }
 }

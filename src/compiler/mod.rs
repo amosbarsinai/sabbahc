@@ -26,24 +26,24 @@ impl Assembly {
     pub fn new() -> Self {
         let mut ret = Self {
             data: String::new(),
-            text: String::from("        global _start\n        global exit\n"),
+            text: String::from("        .global _start\n        .global exit\n"),
             bss: String::new(),
             rodata: String::new(),
             entrypoint: String::new(),
             calls: HashMap::new(),
         };
-        ret.calls.insert("exit".to_string(), format!("        mov rax, {}\n        syscall", syscall("exit")).to_string());
+        ret.calls.insert("exit".to_string(), format!("        mov ${}, %rax\n        syscall", syscall("exit")).to_string());
         ret
     }
     pub fn to_string(&self) -> String {
         let mut ret = format!(
-"section .data
+".section .data
 {}
-section .bss
+.section .bss
 {}
-section .rodata
+.section .rodata
 {}
-section .text
+.section .text
 {}
 _start:
 {}",
@@ -86,9 +86,9 @@ impl Compiler {
                 match node {
                     AstNodeType::ExitStatement(code) => {
                         if let ExpressionType::IntLiteral(value) = code.expression_type {
-                            self.ln(&format!("mov rdi, {}", value));
+                            self.ln(&format!("mov ${}, %rdi", value));
                         } else {
-                            self.ln("mov rdi, 0");
+                            self.ln("mov $0, %rdi");
                         }
                         self.ln("call exit");
                     }
