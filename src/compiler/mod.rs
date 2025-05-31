@@ -84,15 +84,14 @@ impl Compiler {
             for j in 0..children.len() {
                 let node = &children[j];
                 match node {
-                    AstNodeType::ExitStatement => {
-                        if let Some(AstNodeType::Expression(eval_type, expr_type)) = &children.get(j + 1) {
-                            if let ExpressionType::IntLiteral(value) = expr_type {
-                                self.ln(format!("mov rdi, {}", value).as_str());
-                                self.ln("call exit");
-                            }
+                    AstNodeType::ExitStatement(code) => {
+                        if let ExpressionType::IntLiteral(value) = code.expression_type {
+                            self.ln(&format!("mov rdi, {}", value));
+                        } else {
+                            self.ln("mov rdi, 0");
                         }
+                        self.ln("call exit");
                     }
-                    AstNodeType::Expression(_, _) => {}
                 }
             }
         }

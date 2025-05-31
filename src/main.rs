@@ -2,10 +2,13 @@ use std::process::exit;
 use std::process::Command;
 use std::path::Path;
 use std::io::Write;
+
+use err::Diagnostic;
 mod tokenizer;
 mod parser;
 mod compiler;
 mod typing;
+mod err;
 
 const HELP: &str = "sabbahc - cli for the Sabbah language
 
@@ -186,10 +189,10 @@ fn main() {
     }
     /* */
     let input = std::fs::read_to_string(instructions.input.clone()).expect("Failed to read input file");
-    let mut tokenizer = tokenizer::Tokenizer::new(input);
+    let mut tokenizer = tokenizer::Tokenizer::new(input, instructions.input.clone());
     let tokenized: Vec<tokenizer::Token> = tokenizer.tokenize();
     let mut parser = parser::Parser::new(tokenized);
-    let parsed: Vec<parser::Ast> = parser.parse();
+    let parsed: Vec<parser::Ast> = parser.parse(instructions.input.clone());
     let mut compiler = compiler::Compiler::new(parsed);
     let compiled: String = compiler.compile();
 

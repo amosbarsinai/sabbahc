@@ -1,5 +1,6 @@
 use crate::tokenizer::{Token, TokenType};
 use crate::typing::{Type, TYPE_INT32};
+use crate::Diagnostic;
 use std::process::exit;
 
 #[derive(Clone, Debug)]
@@ -8,9 +9,14 @@ pub enum ExpressionType {
 }
 
 #[derive(Clone, Debug)]
+pub struct Expression {
+    pub expression_type: ExpressionType,
+    pub eval_type: Type,
+}
+
+#[derive(Clone, Debug)]
 pub enum AstNodeType {
-    ExitStatement,
-    Expression(Type, ExpressionType)
+    ExitStatement(Expression)
 }
 
 #[derive(Debug)]
@@ -36,93 +42,105 @@ impl Parser {
     pub fn new(input: Vec<Token>) -> Self {
         Parser { input, index: 0 }
     }
-    fn peek(&self) -> Option<&Token> {
-        self.input.get(self.index)
+    fn peek(&self) -> Option<Token> {
+        self.input.get(self.index).cloned()
     }
-    fn consume(&mut self) -> Option<&Token> {
+    fn consume(&mut self) -> Option<Token> {
         if self.index < self.input.len() {
             let token = &self.input[self.index];
             self.index += 1;
-            Some(token)
+            Some(token.clone())
         } else {
             None
         }
     }
-    pub fn parse(&mut self) -> Vec<Ast> {
+    pub fn parse(&mut self, filename: String) -> Vec<Ast> {
         let mut parsed = Vec::new();
         
         while let Some(token) = self.consume() {
             let mut statement = Ast::new();
-            
             match token.token_type {
                 TokenType::ExitStatement => {
-                    statement.add_child(AstNodeType::ExitStatement);
-                    if let Some(next_token) = self.consume() {
-                        match next_token.token_type {
-                            TokenType::IntegerLiteral => {
-                                if let Some(ref val_str) = next_token.value {
-                                    if let Ok(value) = val_str.parse::<i32>() {
-                                        statement.add_child(AstNodeType::Expression(
-                                            TYPE_INT32.clone(),
-                                            ExpressionType::IntLiteral(value)
-                                        ));
-                                    }
-                                }
-                            }
-                            TokenType::Semicolon => {
-                                statement.add_child(AstNodeType::Expression(
-                                    TYPE_INT32.clone(),
-                                    ExpressionType::IntLiteral(0),
-                                ));
-                            }
-                            _ => {
-                                println!("ERROR: Expected integer literal or semicolon after exit statement");
-                                exit(1);
-                            }
-                        }
+                    let mut code: Option<i32> = None;
 
-                        // Expect the semicolon if we haven't already handled it
-                        if next_token.token_type != TokenType::Semicolon {
-                            if let Some(semi) = self.consume() {
-                                if semi.token_type != TokenType::Semicolon {
-                                    println!("ERROR: Expected semicolon after exit statement");
+                    let next_token = self.consume();
+                    match next_token {
+                        None => {
+                            Diagnostic {
+                                file: filename.clone(),
+                                line: token.line,
+                                column: token.column,
+                                message: String::from("ExitStatement token is expected to be followed by an Expression token or a Semicolon token"),
+                                suggestion: Some(String::from("add a semicolon at the end of the statement")),
+                                code_snippet: None
+                            }.out();
+                            exit(1);
+                        }
+                        Some(ref t) if t.token_type == TokenType::IntegerLiteral => {
+                            code = t.value.as_ref()
+                                .and_then(|v| v.parse::<i32>().ok());
+                            statement.add_child(AstNodeType::ExitStatement(Expression {
+                                expression_type: ExpressionType::IntLiteral(code.unwrap()),
+                                eval_type: TYPE_INT32.clone(),
+                            }));
+                            if let Some(next) = self.peek() {
+                                if next.token_type == TokenType::Semicolon {
+                                    self.consume(); // consume the semicolon
+                                    parsed.push(statement);
+                                    statement = Ast::new();
+                                    continue;
+                                } else {
+                                    Diagnostic {
+                                        file: filename.clone(),
+                                        line: next.line,
+                                        column: next.column,
+                                        message: String::from("Expected a semicolon after exit statement"),
+                                        suggestion: Some(String::from("add a semicolon at the end of the statement")),
+                                        code_snippet: None
+                                    }.out();
                                     exit(1);
                                 }
                             } else {
-                                println!("ERROR: Missing semicolon after exit statement");
+                                Diagnostic {
+                                    file: filename.clone(),
+                                    line: token.line,
+                                    column: token.column,
+                                    message: String::from("ExitStatement token is expected to be followed by a Semicolon token"),
+                                    suggestion: Some(String::from("add a semicolon at the end of the statement")),
+                                    code_snippet: None
+                                }.out();
                                 exit(1);
                             }
                         }
-
-                        parsed.push(statement);
-                        continue;
-                    }
-                    else if let Some(next_token) = self.peek() {
-                        if let TokenType::Semicolon = next_token.token_type {
-                            statement.add_child(AstNodeType::Expression(
-                                TYPE_INT32.clone(),
-                                ExpressionType::IntLiteral(0)
-                            ));
-                        } else {
-                            println!("ERROR: Expected integer literal after exit statement");
-                            exit(1);
-                        }
-                    }
-                    if let Some(next_token) = self.consume() {
-                        if let TokenType::Semicolon = next_token.token_type {
+                        Some(ref t) if t.token_type == TokenType::Semicolon => {
+                            statement.add_child(AstNodeType::ExitStatement(Expression {
+                                expression_type: ExpressionType::IntLiteral(0),
+                                eval_type: TYPE_INT32.clone(),
+                            }));
                             parsed.push(statement);
+                            statement = Ast::new();
                             continue;
                         }
+                        _ => {}
                     }
-                    println!("ERROR: Invalid exit statement syntax");
-                    exit(1);
+                }
+                TokenType::Semicolon => {
+                    parsed.push(statement);
+                    statement = Ast::new();
                 }
                 _ => {
-                    println!("ERROR: Unexpected token: {:?}", token);
+                    Diagnostic {
+                        file: filename.clone(),
+                        line: token.line,
+                        column: token.column,
+                        message: format!("Unexpected token: {:?}", token.token_type),
+                        suggestion: Some(String::from("Check the syntax of your code")),
+                        code_snippet: None
+                    }.out();
                     exit(1);
                 }
             }
-        }
+        }                
         parsed
     }
 }
