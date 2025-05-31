@@ -29,9 +29,9 @@ Description:
   supports compiling to assembly, object code, and fully linked executables.
 
 Examples:
-  sabbahc main.sabbah         # Compile and link (default output: <filename>.out)
-  sabbahc main.sabbah -o prog # Compile and link, output to 'prog'
-  sabbahc main.sabbah -s      # Compile to Assembly only
+  sabbahc main.sbb         # Compile and link (default output: <filename>.out)
+  sabbahc main.sbb -o prog # Compile and link, output to 'prog'
+  sabbahc main.sbb -s      # Compile to Assembly only
 ";
 
 #[derive(PartialEq, Debug)]
