@@ -194,10 +194,10 @@ fn main() {
     }
     /* */
     let input = std::fs::read_to_string(instructions.input.clone()).expect("Failed to read input file");
-    let mut tokenizer = tokenizer::Tokenizer::new(input, instructions.input.clone());
+    let mut tokenizer = tokenizer::Tokenizer::new(&input, instructions.input.clone());
     let tokenized: Vec<tokenizer::Token> = tokenizer.tokenize();
-    let mut parser = parser::Parser::new(tokenized);
-    let parsed: Vec<parser::Ast> = parser.parse(instructions.input.clone());
+    let mut parser = parser::Parser::new(tokenized, instructions.input.clone());
+    let parsed: Vec<parser::Ast> = parser.parse(&input);
     let mut compiler = compiler::Compiler::new(parsed);
     let compiled: String = compiler.compile();
 

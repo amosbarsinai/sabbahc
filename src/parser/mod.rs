@@ -36,11 +36,12 @@ impl Ast {
 pub struct Parser {
     input: Vec<Token>,
     index: usize,
+    filename: String,
 }
 
 impl Parser {
-    pub fn new(input: Vec<Token>) -> Self {
-        Parser { input, index: 0 }
+    pub fn new(input: Vec<Token>, filename: String) -> Self {
+        Parser { input, index: 0, filename }
     }
     fn peek(&self) -> Option<Token> {
         self.input.get(self.index).cloned()
@@ -54,7 +55,7 @@ impl Parser {
             None
         }
     }
-    pub fn parse(&mut self, filename: String) -> Vec<Ast> {
+    pub fn parse(&mut self, source_code: &String) -> Vec<Ast> {
         let mut parsed = Vec::new();
         
         while let Some(token) = self.consume() {
@@ -67,13 +68,12 @@ impl Parser {
                     match next_token {
                         None => {
                             Diagnostic {
-                                file: filename.clone(),
+                                file: self.filename.clone(),
                                 line: token.line,
                                 column: token.column,
                                 message: String::from("ExitStatement token is expected to be followed by an Expression token or a Semicolon token"),
                                 suggestion: Some(String::from("add a semicolon at the end of the statement")),
-                                code_snippet: None
-                            }.out();
+                            }.out(source_code);
                             exit(1);
                         }
                         Some(ref t) if t.token_type == TokenType::IntegerLiteral => {
@@ -91,24 +91,22 @@ impl Parser {
                                     continue;
                                 } else {
                                     Diagnostic {
-                                        file: filename.clone(),
+                                        file: self.filename.clone(),
                                         line: next.line,
                                         column: next.column,
                                         message: String::from("Expected a semicolon after exit statement"),
                                         suggestion: Some(String::from("add a semicolon at the end of the statement")),
-                                        code_snippet: None
-                                    }.out();
+                                    }.out(source_code);
                                     exit(1);
                                 }
                             } else {
                                 Diagnostic {
-                                    file: filename.clone(),
+                                    file: self.filename.clone(),
                                     line: token.line,
                                     column: token.column,
                                     message: String::from("ExitStatement token is expected to be followed by a Semicolon token"),
                                     suggestion: Some(String::from("add a semicolon at the end of the statement")),
-                                    code_snippet: None
-                                }.out();
+                                }.out(source_code);
                                 exit(1);
                             }
                         }
@@ -130,13 +128,12 @@ impl Parser {
                 }
                 _ => {
                     Diagnostic {
-                        file: filename.clone(),
+                        file: self.filename.clone(),
                         line: token.line,
                         column: token.column,
                         message: format!("Unexpected token: {:?}", token.token_type),
                         suggestion: Some(String::from("Check the syntax of your code")),
-                        code_snippet: None
-                    }.out();
+                    }.out(source_code);
                     exit(1);
                 }
             }

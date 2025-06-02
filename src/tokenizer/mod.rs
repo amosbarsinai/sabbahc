@@ -34,9 +34,9 @@ enum CommentType {
 }
 
 impl Tokenizer {
-    pub fn new(input: String, filename: String) -> Self {
+    pub fn new(input: &String, filename: String) -> Self {
         Tokenizer {
-            input,
+            input: input.clone(),
             index: 0,
             ln: 1,
             cl: 1,
@@ -69,6 +69,7 @@ impl Tokenizer {
         Some(char)
     }
     pub fn tokenize(&mut self) -> Vec<Token> {
+        let source_code = &self.input.clone();
         let mut tokens: Vec<Token> = Vec::new();
         while self.index < self.input.len() as u64 {
             let char = self.consume(0);
@@ -117,9 +118,8 @@ impl Tokenizer {
                         column: self.cl,
                         message: format!("Unexpected text: {}", current),
                         suggestion: None,
-                        code_snippet: Some(self.input.clone()),
                     };
-                    diagnostic.out();
+                    diagnostic.out(source_code);
                     exit(7);
                 }
             }
@@ -157,9 +157,8 @@ impl Tokenizer {
                         column: self.cl,
                         message: String::from("Unexpected slash character (at EOF)"),
                         suggestion: Some(String::from("division not implemented yet - maybe you meant to add a comment?")),
-                        code_snippet: Some(self.input.clone()),
                     };
-                    diagnostic.out();
+                    diagnostic.out(source_code);
                     exit(7);
                 }
                 let next = self.consume(0).unwrap();
@@ -173,9 +172,8 @@ impl Tokenizer {
                         column: self.cl,
                         message: format!("Unexpected comment initalizer: {}", next),
                         suggestion: Some(String::from("division not implemented yet. * or / expected after slash characters, since comment initialization is assumed.")),
-                        code_snippet: Some(self.input.clone()),
                     };
-                    diagnostic.out();
+                    diagnostic.out(source_code);
                     exit(7);
                 }
                 if let CommentType::Line = comment_type {
@@ -198,9 +196,8 @@ impl Tokenizer {
                         column: self.cl,
                         message: format!("Unexpected character: {}", char),
                         suggestion: None,
-                        code_snippet: Some(self.input.clone()),
                     };
-                    diagnostic.out();
+                    diagnostic.out(source_code);
                     exit(7);
             }
         }

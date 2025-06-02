@@ -6,11 +6,10 @@ pub struct Diagnostic {
     pub column: usize,
     pub message: String,
     pub suggestion: Option<String>,
-    pub code_snippet: Option<String>,
 }
 
 impl Diagnostic {
-    pub fn out(self) {
+    pub fn out(self, source_code: &String) {
         // ANSI color codes
         const RED: &str = "\x1b[31m";
         const BOLD: &str = "\x1b[1m";
@@ -25,9 +24,7 @@ impl Diagnostic {
             self.column
         );
 
-        if let Some(snippet) = self.code_snippet {
-            render_snippet(snippet, (self.line, self.column));
-        }
+        render_snippet(source_code, (self.line, self.column));
 
         if let Some(suggestion) = self.suggestion {
             println!("{}fix:{} {}", BOLD, RESET, suggestion);
@@ -59,9 +56,9 @@ fn digit_count(num: i32) -> usize {
     count
 }
 
-fn render_snippet(snippet: String, problem: (usize, usize)) {
+fn render_snippet(source_code: &String, problem: (usize, usize)) {
     let width = get_terminal_width();
-    let lines: Vec<&str> = snippet.lines().collect();
+    let lines: Vec<&str> = source_code.lines().collect();
     let num_lines = lines.len();
     let line_num_width = digit_count(num_lines as i32);
     let start = problem.0.saturating_sub(3);
