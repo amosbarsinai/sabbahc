@@ -60,84 +60,64 @@ impl Parser {
         
         while let Some(token) = self.consume() {
             let mut statement = Ast::new();
+            let mut exit_code: Option<i32> = None;
             match token.token_type {
-                TokenType::ExitStatement => {
-                    let mut code: Option<i32> = None;
-
-                    let next_token = self.consume();
-                    match next_token {
-                        None => {
-                            Diagnostic {
-                                file: self.filename.clone(),
-                                line: token.line,
-                                column: token.column,
-                                message: String::from("ExitStatement token is expected to be followed by an Expression token or a Semicolon token"),
-                                suggestion: Some(String::from("add a semicolon at the end of the statement")),
-                            }.out(source_code);
-                            exit(1);
-                        }
-                        Some(ref t) if t.token_type == TokenType::IntegerLiteral => {
-                            code = t.value.as_ref()
-                                .and_then(|v| v.parse::<i32>().ok());
-                            statement.add_child(AstNodeType::ExitStatement(Expression {
-                                expression_type: ExpressionType::IntLiteral(code.unwrap()),
-                                eval_type: TYPE_INT32.clone(),
-                            }));
-                            if let Some(next) = self.peek() {
-                                if next.token_type == TokenType::Semicolon {
-                                    self.consume(); // consume the semicolon
-                                    parsed.push(statement);
-                                    statement = Ast::new();
-                                    continue;
-                                } else {
-                                    Diagnostic {
-                                        file: self.filename.clone(),
-                                        line: next.line,
-                                        column: next.column,
-                                        message: String::from("Expected a semicolon after exit statement"),
-                                        suggestion: Some(String::from("add a semicolon at the end of the statement")),
-                                    }.out(source_code);
-                                    exit(1);
-                                }
-                            } else {
+                TokenType::ExitKeyword => {
+                    if self.peek().is_none() {
+                        Diagnostic {
+                            message: "Exit keyword is expected to be followed by an expression or semicolon".to_string(),
+                            file: self.filename.clone(),
+                            line: token.line,
+                            column: token.column,
+                            suggestion: None,
+                        }.out(source_code);
+                        exit(1);
+                    }
+                    let next_token = self.consume().unwrap();
+                    match next_token.token_type {
+                        TokenType::IntegerLiteral => {
+                            let value: i32 = next_token.value.unwrap().parse().unwrap();
+                            exit_code = Some(value);
+                            if self.peek().is_none() || self.peek().unwrap().token_type != TokenType::Semicolon {
                                 Diagnostic {
+                                    message: "full exit statement must end with a semicolon".to_string(),
                                     file: self.filename.clone(),
-                                    line: token.line,
-                                    column: token.column,
-                                    message: String::from("ExitStatement token is expected to be followed by a Semicolon token"),
-                                    suggestion: Some(String::from("add a semicolon at the end of the statement")),
+                                    line: next_token.line,
+                                    column: next_token.column,
+                                    suggestion: None,
                                 }.out(source_code);
                                 exit(1);
                             }
-                        }
-                        Some(ref t) if t.token_type == TokenType::Semicolon => {
+                            self.consume();
                             statement.add_child(AstNodeType::ExitStatement(Expression {
-                                expression_type: ExpressionType::IntLiteral(0),
+                                expression_type: ExpressionType::IntLiteral(value),
                                 eval_type: TYPE_INT32.clone(),
                             }));
                             parsed.push(statement);
-                            statement = Ast::new();
-                            continue;
                         }
-                        _ => {}
+                        TokenType::Semicolon => {
+                            exit_code = Some(0);
+                            statement.add_child(AstNodeType::ExitStatement(Expression {
+                                expression_type: ExpressionType::IntLiteral(exit_code.unwrap_or(0)),
+                                eval_type: TYPE_INT32.clone(),
+                            }));
+                            parsed.push(statement);
+                        }
+                        _ => {
+                            Diagnostic {
+                                message: "Exit keyword must be followed by an integer literal or semicolon".to_string(),
+                                file: self.filename.clone(),
+                                line: next_token.line,
+                                column: next_token.column,
+                                suggestion: None,
+                            }.out(source_code);
+                            exit(1);
+                        }
                     }
                 }
-                TokenType::Semicolon => {
-                    parsed.push(statement);
-                    statement = Ast::new();
-                }
-                _ => {
-                    Diagnostic {
-                        file: self.filename.clone(),
-                        line: token.line,
-                        column: token.column,
-                        message: format!("Unexpected token: {:?}", token.token_type),
-                        suggestion: Some(String::from("Check the syntax of your code")),
-                    }.out(source_code);
-                    exit(1);
-                }
+                _ => {}
             }
-        }                
+        }
         parsed
     }
 }

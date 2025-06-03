@@ -4,11 +4,10 @@ use crate::err::Diagnostic;
 
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub enum TokenType {
-    ExitStatement,
+    ExitKeyword,
     IntegerLiteral,
     Semicolon,
     LetKeyword,
-    Identifier,
     Assigner,
 }
 
@@ -78,6 +77,7 @@ impl Tokenizer {
             }
             let char = char.unwrap();
             if char.is_alphabetic() {
+                let start = (self.ln, self.cl);
                 let mut current = String::from(format!("{}", char));
                 while let Some(c) = self.peek(0) {
                     if c.is_alphanumeric() {
@@ -89,33 +89,33 @@ impl Tokenizer {
                 }
                 if current == "exit" {
                     tokens.push(Token {
-                        token_type: TokenType::ExitStatement,
+                        token_type: TokenType::ExitKeyword,
                         value: None,
-                        line: self.ln,
-                        column: self.cl
+                        line: start.0,
+                        column: start.1
                     })
                 }
                 else if current == "let" {
                     tokens.push(Token {
                         token_type: TokenType::LetKeyword,
                         value: None,
-                        line: self.ln,
-                        column: self.cl
+                        line: start.0,
+                        column: start.1
                     });
                 }
                 else if current == "=" {
                     tokens.push(Token {
                         token_type: TokenType::Assigner,
                         value: None,
-                        line: self.ln,
-                        column: self.cl
+                        line: start.0,
+                        column: start.1
                     });
                 }
                 else {
                     let diagnostic: Diagnostic = Diagnostic {
                         file: self.filename.clone(),
-                        line: self.ln,
-                        column: self.cl,
+                        line: start.0,
+                        column: start.1,
                         message: format!("Unexpected text: {}", current),
                         suggestion: None,
                     };
