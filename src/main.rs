@@ -55,7 +55,7 @@ struct CLIInstructions {
 
 impl CLIInstructions {
     pub fn from(args: Vec<String>) -> CLIInstructions {
-        let mut input: String = args[1].clone();
+        let mut input: String = String::new();
         let mut output: String = String::new();
         let mut mode: OutputMode = OutputMode::BinaryExecutable;
         let mut exit_early: Option<EarlyExit> = None;
@@ -119,8 +119,8 @@ impl CLIInstructions {
             i += 1;
         }
     if input.is_empty() {
-        println!("ERROR: No input file specified");
-        exit(6);
+        println!("WARNING: No input file specified, defaulting to stdin");
+        input = String::from("/dev/stdin");
     }
     if output.is_empty() { // Generate output file name from input
         let input_path = Path::new(&input);
@@ -138,11 +138,11 @@ impl CLIInstructions {
         }
     }
     return CLIInstructions {
-        input: input,
-        output: output,
-        mode: mode,
-        exit_early: exit_early,
-        force: force,
+        input,
+        output,
+        mode,
+        exit_early,
+        force,
     }
     }
 }
