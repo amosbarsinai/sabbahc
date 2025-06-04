@@ -26,7 +26,7 @@ impl Assembly {
     pub fn new() -> Self {
         let mut ret = Self {
             data: String::new(),
-            text: String::from("        .global _start\n        .global exit\n"),
+            text: String::from("        .globl _start\n"),
             bss: String::new(),
             rodata: String::new(),
             entrypoint: String::new(),
