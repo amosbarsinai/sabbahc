@@ -161,7 +161,6 @@ fn find_empty_temp_filename() -> String {
 }
 
 fn main() {
-    println!("Happy pride month! 🏳️‍🌈");
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 1 {
         print!("{}", HELP);

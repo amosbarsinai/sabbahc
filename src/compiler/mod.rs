@@ -95,6 +95,7 @@ impl Compiler {
                 }
             }
         }
+        self.asm.entrypoint.push_str("        mov $0, %rdi\n        call exit\n");
         self.asm.to_string()
     }
 }
