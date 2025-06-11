@@ -1,14 +1,13 @@
-use std::process::exit;
-use std::process::Command;
-use std::path::Path;
 use std::io::Write;
+use std::path::Path;
+use std::process::Command;
+use std::process::exit;
 
-use err::Diagnostic;
-mod tokenizer;
-mod parser;
-mod compiler;
-mod typing;
+// mod compiler;
 mod err;
+mod structure;
+mod tokenizer;
+mod typing;
 
 const HELP: &str = "sabbahc - cli for the Sabbah language
 
@@ -42,7 +41,10 @@ enum OutputMode {
 }
 
 #[derive(Debug)]
-enum EarlyExit {Version, Help}
+enum EarlyExit {
+    Version,
+    Help,
+}
 
 #[derive(Debug)]
 struct CLIInstructions {
@@ -64,86 +66,91 @@ impl CLIInstructions {
         let mut input_set: bool = false;
         while i < args.len() {
             match args[i].as_str() {
-                        "-h" | "--help" => {
-                            exit_early = Some(EarlyExit::Help);
-                        }
-                        "-f" | "--force" => {
-                            force = true;
-                        }
-                        "-v" | "--version" => {
-                            exit_early = Some(EarlyExit::Version);
-                        }
-                        "-o" | "--output" => {
-                            if i + 1 < args.len() {
-                                output = args[i + 1].clone();
-                                i += 1;
-                            } else {
-                                println!("ERROR: -o flag requires an argument");
-                                exit(3);
+                "-h" | "--help" => {
+                    exit_early = Some(EarlyExit::Help);
+                }
+                "-f" | "--force" => {
+                    force = true;
+                }
+                "-v" | "--version" => {
+                    exit_early = Some(EarlyExit::Version);
+                }
+                "-o" | "--output" => {
+                    if i + 1 < args.len() {
+                        output = args[i + 1].clone();
+                        i += 1;
+                    } else {
+                        println!("ERROR: -o flag requires an argument");
+                        exit(3);
+                    }
+                }
+                "-s" | "--asm" => {
+                    mode = OutputMode::Assembly;
+                }
+                "-b" | "--object" => {
+                    mode = OutputMode::Object;
+                }
+                "-m" | "--mode" => {
+                    if i + 1 < args.len() {
+                        match args[i + 1].as_str() {
+                            "asm" | "assembly" | "s" => mode = OutputMode::Assembly,
+                            "obj" | "object" => mode = OutputMode::Object,
+                            "bin" | "binary" => mode = OutputMode::BinaryExecutable,
+                            _ => {
+                                println!("ERROR: Unrecognized mode: {}", args[i + 1]);
+                                exit(4);
                             }
                         }
-                        "-s" | "--asm" => {
-                            mode = OutputMode::Assembly;
-                        }
-                        "-b" | "--object" => {
-                            mode = OutputMode::Object;
-                        }
-                        "-m" | "--mode" => {
-                            if i + 1 < args.len() {
-                                match args[i + 1].as_str() {
-                                    "asm" | "assembly" | "s" => mode = OutputMode::Assembly,
-                                    "obj" | "object" => mode = OutputMode::Object,
-                                    "bin" | "binary" => mode = OutputMode::BinaryExecutable,
-                                    _ => {println!("ERROR: Unrecognized mode: {}", args[i + 1]); exit(4);}
-                                }
-                                i += 1;
-                            } else {
-                                println!("ERROR: -m flag requires an argument");
-                                exit(5);
-                            }
-                        }
-                    _ => {
-                        if !input_set {
-                            input = args[i].clone();
-                            input_set = true;
-                        }
-                        else if args[i].starts_with("-") {
+                        i += 1;
+                    } else {
+                        println!("ERROR: -m flag requires an argument");
+                        exit(5);
+                    }
+                }
+                _ => {
+                    if !input_set {
+                        input = args[i].clone();
+                        input_set = true;
+                    } else {
+                        if args[i].starts_with("-") {
                             println!("ERROR: Unrecognized flag/option: {}", args[i]);
-                            exit(2);
-                        }
-                        else {
+                        } else {
                             println!("ERROR: Unexpected argument: {}", args[i]);
                         }
+                        exit(2);
                     }
+                }
             }
             i += 1;
         }
-    if input.is_empty() {
-        println!("WARNING: No input file specified, defaulting to stdin");
-        input = String::from("/dev/stdin");
-    }
-    if output.is_empty() { // Generate output file name from input
-        let input_path = Path::new(&input);
-        let mut output_file_name = input_path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("output")
-            .to_string();
-        if output_file_name.ends_with(".sbb") {
-            output_file_name = output_file_name[0..output_file_name.len()-4].to_string();
+        if input.is_empty() {
+            println!("WARNING: No input file specified, defaulting to stdin");
+            input = String::from("/dev/stdin");
         }
-        match mode {
-            OutputMode::Assembly => output = format!("{}.s", output_file_name),
-            OutputMode::Object => output = format!("{}.o", output_file_name),
-            OutputMode::BinaryExecutable => output = format!("{}", output_file_name),
+        if output.is_empty() {
+            // Generate output file name from input
+            let input_path = Path::new(&input);
+            let mut output_file_name = input_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("output")
+                .to_string();
+            if output_file_name.ends_with(".sbb") {
+                output_file_name = output_file_name[0..output_file_name.len() - 4].to_string();
+            }
+            match mode {
+                OutputMode::Assembly => output = format!("{}.s", output_file_name),
+                OutputMode::Object => output = format!("{}.o", output_file_name),
+                OutputMode::BinaryExecutable => output = format!("{}", output_file_name),
+            }
         }
-    }
-    return CLIInstructions {
-        input,
-        output,
-        mode,
-        exit_early,
-        force,
-    }
+        return CLIInstructions {
+            input,
+            output,
+            mode,
+            exit_early,
+            force,
+        };
     }
 }
 
@@ -192,66 +199,84 @@ fn main() {
             exit(9);
         }
     }
-    /* */
-    let input = std::fs::read_to_string(instructions.input.clone()).expect("Failed to read input file");
+    let input =
+        std::fs::read_to_string(instructions.input.clone()).expect("Failed to read input file");
     let mut tokenizer = tokenizer::Tokenizer::new(&input, instructions.input.clone());
     let tokenized: Vec<tokenizer::Token> = tokenizer.tokenize();
-    let mut parser = parser::Parser::new(tokenized, instructions.input.clone());
-    let parsed: Vec<parser::Ast> = parser.parse(&input);
-    let mut compiler = compiler::Compiler::new(parsed);
-    let compiled: String = compiler.compile();
+    
+    let parser = structure::parser::Parser::new(tokenized, input.clone());
+    let parsed: structure::Scope = parser.parse(instructions.input.clone());
 
-    match instructions.mode {
-        OutputMode::Assembly => {
-            let mut output = std::fs::File::create(instructions.output.clone()).unwrap();
-            output.write_all(compiled.as_bytes()).unwrap();
-            println!("Successfully compiled to file \"{}\"", instructions.output.clone());
-        }
-        OutputMode::Object => {
-            let asm_output = find_empty_temp_filename();
-            let mut asm_file = std::fs::File::create(asm_output.clone()).unwrap();
-            asm_file.write_all(compiled.as_bytes()).unwrap();
-            let object_output = instructions.output.clone();
-            let assembler_output = Command::new("gcc")
-                .arg("-o")
-                .arg(format!("{}", instructions.output.clone()))
-                .arg("-x")
-                .arg("assembler")
-                .arg("-nostdlib")
-                .arg("-static")
-                .arg("-c")
-                .arg(format!("{}", asm_output))
-                .output()
-                .expect("Failed to execute assembler!");
-            if assembler_output.status.success() {
-                println!("Successfully assembled to file \"{}\"", object_output);
-            } else {
-                println!("Assembler failed with error: {}", String::from_utf8_lossy(&assembler_output.stderr));
-                exit(11);
-            }
-            std::fs::remove_file(asm_output).expect("Failed to remove temporary asm file");
-        }
-        OutputMode::BinaryExecutable => {
-            let asm_output = find_empty_temp_filename();
-            let mut asm_file = std::fs::File::create(asm_output.clone()).unwrap();
-            asm_file.write_all(compiled.as_bytes()).unwrap();
-            let assembler_output = Command::new("gcc")
-                .arg("-o")
-                .arg(format!("{}", instructions.output.clone()))
-                .arg("-x")
-                .arg("assembler")
-                .arg("-nostdlib")
-                .arg("-static")
-                .arg(format!("{}", asm_output))
-                .output()
-                .expect("Failed to execute assembler!");
-            if assembler_output.status.success() {
-                println!("Successfully compiled to file \"{}\"", instructions.output.clone());
-            } else {
-                println!("Assembler failed with error: {}", String::from_utf8_lossy(&assembler_output.stderr));
-                exit(11);
-            }
-            std::fs::remove_file(asm_output).expect("Failed to remove temporary asm file");
-        }
+    for statement in parsed.children {
+        println!("{:?}", statement);
     }
+
+    // let mut compiler = compiler::Compiler::new(parsed);
+    // let compiled: String = compiler.compile();
+
+    // match instructions.mode {
+    //     OutputMode::Assembly => {
+    //         let mut output = std::fs::File::create(instructions.output.clone()).unwrap();
+    //         output.write_all(compiled.as_bytes()).unwrap();
+    //         println!(
+    //             "Successfully compiled to file \"{}\"",
+    //             instructions.output.clone()
+    //         );
+    //     }
+    //     OutputMode::Object => {
+    //         let asm_output = find_empty_temp_filename();
+    //         let mut asm_file = std::fs::File::create(asm_output.clone()).unwrap();
+    //         asm_file.write_all(compiled.as_bytes()).unwrap();
+    //         let object_output = instructions.output.clone();
+    //         let assembler_output = Command::new("gcc")
+    //             .arg("-o")
+    //             .arg(format!("{}", instructions.output.clone()))
+    //             .arg("-x")
+    //             .arg("assembler")
+    //             .arg("-nostdlib")
+    //             .arg("-static")
+    //             .arg("-c")
+    //             .arg(format!("{}", asm_output))
+    //             .output()
+    //             .expect("Failed to execute assembler!");
+    //         if assembler_output.status.success() {
+    //             println!("Successfully assembled to file \"{}\"", object_output);
+    //         } else {
+    //             println!(
+    //                 "Assembler failed with error: {}",
+    //                 String::from_utf8_lossy(&assembler_output.stderr)
+    //             );
+    //             exit(11);
+    //         }
+    //         std::fs::remove_file(asm_output).expect("Failed to remove temporary asm file");
+    //     }
+    //     OutputMode::BinaryExecutable => {
+    //         let asm_output = find_empty_temp_filename();
+    //         let mut asm_file = std::fs::File::create(asm_output.clone()).unwrap();
+    //         asm_file.write_all(compiled.as_bytes()).unwrap();
+    //         let assembler_output = Command::new("gcc")
+    //             .arg("-o")
+    //             .arg(format!("{}", instructions.output.clone()))
+    //             .arg("-x")
+    //             .arg("assembler")
+    //             .arg("-nostdlib")
+    //             .arg("-static")
+    //             .arg(format!("{}", asm_output))
+    //             .output()
+    //             .expect("Failed to execute assembler!");
+    //         if assembler_output.status.success() {
+    //             println!(
+    //                 "Successfully compiled to file \"{}\"",
+    //                 instructions.output.clone()
+    //             );
+    //         } else {
+    //             println!(
+    //                 "Assembler failed with error: {}",
+    //                 String::from_utf8_lossy(&assembler_output.stderr)
+    //             );
+    //             exit(11);
+    //         }
+    //         std::fs::remove_file(asm_output).expect("Failed to remove temporary asm file");
+    //     }
+    // }
 }

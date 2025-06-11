@@ -1,5 +1,5 @@
-use std::panic;
 use std::collections::HashMap;
+use std::panic;
 
 use crate::parser::{Ast, AstNodeType};
 
@@ -32,12 +32,15 @@ impl Assembly {
             entrypoint: String::new(),
             calls: HashMap::new(),
         };
-        ret.calls.insert("exit".to_string(), format!("        mov ${}, %rax\n        syscall", syscall("exit")).to_string());
+        ret.calls.insert(
+            "exit".to_string(),
+            format!("        mov ${}, %rax\n        syscall", syscall("exit")).to_string(),
+        );
         ret
     }
     pub fn to_string(&self) -> String {
         let mut ret = format!(
-".section .data
+            ".section .data
 {}
 .section .bss
 {}
@@ -47,11 +50,7 @@ impl Assembly {
 {}
 _start:
 {}",
-        self.data,
-        self.bss,
-        self.rodata,
-        self.text,
-        self.entrypoint,
+            self.data, self.bss, self.rodata, self.text, self.entrypoint,
         );
         for label in &self.calls {
             ret.push_str(format!("{}:\n", label.0).as_str());
@@ -76,7 +75,9 @@ impl Compiler {
         }
     }
     pub fn ln(&mut self, line: &str) {
-        self.asm.entrypoint.push_str(&format!("{}{}\n", " ".repeat(self.indent + 8), line));
+        self.asm
+            .entrypoint
+            .push_str(&format!("{}{}\n", " ".repeat(self.indent + 8), line));
     }
     pub fn compile(&mut self) -> String {
         for i in 0..self.input.len() {
@@ -95,7 +96,9 @@ impl Compiler {
                 }
             }
         }
-        self.asm.entrypoint.push_str("        mov $0, %rdi\n        call exit\n");
+        self.asm
+            .entrypoint
+            .push_str("        mov $0, %rdi\n        call exit\n");
         self.asm.to_string()
     }
 }

@@ -1,35 +1,45 @@
 use std::process::exit;
 
 use crate::err::Diagnostic;
+use crate::typing::{Type, BUILTIN_TYPES};
 
-#[derive(Debug, PartialEq, Clone, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum TokenType {
-    ExitKeyword,
-    IntegerLiteral,
+    FunctionKeyword,
+    FunctionIdent,
+    ThinArrow,
+    TypeIdent,
+    ParemeterTuple,
+    OpenParen,
+    CloseParen,
+    OpenCurly,
+    CloseCurly,
+    ReturnKeyword,
+    IntLiteral,
     Semicolon,
-    LetKeyword,
-    Assigner,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TokenValue {
+    FunctionIdent(String),
+    TypeIdent(Type),
+    IntLiteral(u64),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Token {
     pub line: usize,
     pub column: usize,
     pub token_type: TokenType,
-    pub value: Option<String>,
+    pub value: Option<TokenValue>,
 }
-
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Tokenizer {
     input: String,
     index: u64,
     ln: usize,
     cl: usize,
-    filename: String
-}
-
-enum CommentType {
-    Line,
-    Block
+    filename: String,
 }
 
 impl Tokenizer {
@@ -39,7 +49,7 @@ impl Tokenizer {
             index: 0,
             ln: 1,
             cl: 1,
-            filename
+            filename,
         }
     }
     fn peek(&self, index: u8) -> Option<char> {
@@ -61,15 +71,20 @@ impl Tokenizer {
         if char == '\n' {
             self.cl = 1;
             self.ln += 1;
-        }
-        else {
+        } else {
             self.cl += 1;
         }
         Some(char)
     }
+
     pub fn tokenize(&mut self) -> Vec<Token> {
+        let mut func_idents: Vec<String> = Vec::new();
+        let type_idents: Vec<String> = BUILTIN_TYPES.keys().cloned().collect(); // I didn't implement struct creation yet - no need for the variable to be mutable
         let source_code = &self.input.clone();
         let mut tokens: Vec<Token> = Vec::new();
+
+        let mut expected: Option<TokenType> = None;
+
         while self.index < self.input.len() as u64 {
             let char = self.consume(0);
             if char.is_none() {
@@ -77,128 +92,154 @@ impl Tokenizer {
             }
             let char = char.unwrap();
             if char.is_alphabetic() {
-                let start = (self.ln, self.cl);
-                let mut current = String::from(format!("{}", char));
-                while let Some(c) = self.peek(0) {
-                    if c.is_alphanumeric() {
-                        current = format!("{}{}", current, c);
-                        self.consume(0);
+                let mut current = String::new();
+                let start: usize = self.cl.clone() as usize;
+                current.push(char);
+                while let Some(next_char) = self.peek(0) {
+                    if next_char.is_alphanumeric() || next_char == '_' {
+                        current.push(self.consume(0).unwrap());
                     } else {
                         break;
                     }
                 }
-                if current == "exit" {
-                    tokens.push(Token {
-                        token_type: TokenType::ExitKeyword,
-                        value: None,
-                        line: start.0,
-                        column: start.1
-                    })
+                match current.as_str() {
+                    "f" => {
+                        tokens.push(Token {
+                            line: self.ln,
+                            column: start,
+                            token_type: TokenType::FunctionKeyword,
+                            value: None,
+                        });
+                        expected = Some(TokenType::FunctionIdent);
+                    }
+                    "return" => {
+                        tokens.push(Token {
+                            line: self.ln,
+                            column: start,
+                            token_type: TokenType::ReturnKeyword,
+                            value: None,
+                        });
+                    }
+                    _ => {
+                        if expected == Some(TokenType::FunctionIdent) {
+                            tokens.push(Token {
+                                line: self.ln,
+                                column: start,
+                                token_type: TokenType::FunctionIdent,
+                                value: Some(TokenValue::FunctionIdent(current.clone())),
+                            });
+                            func_idents.push(current.clone());
+                            expected = None;
+                        } else {
+                            if type_idents.contains(&current) {
+                                tokens.push(Token {
+                                    line: self.ln,
+                                    column: start,
+                                    token_type: TokenType::TypeIdent,
+                                    value: Some(TokenValue::TypeIdent(BUILTIN_TYPES.get(&current).unwrap().clone())),
+                                });
+                            } else {
+                                Diagnostic {
+                                    file: self.filename.clone(),
+                                    line: self.ln,
+                                    column: start,
+                                    message: format!("Unexpected text: \"{}\"", current),
+                                    suggestion: None,
+                                }
+                                .out(source_code);
+                                exit(1);
+                            }
+                        }
+                    }
                 }
-                else if current == "let" {
-                    tokens.push(Token {
-                        token_type: TokenType::LetKeyword,
-                        value: None,
-                        line: start.0,
-                        column: start.1
-                    });
-                }
-                else if current == "=" {
-                    tokens.push(Token {
-                        token_type: TokenType::Assigner,
-                        value: None,
-                        line: start.0,
-                        column: start.1
-                    });
-                }
-                else {
-                    let diagnostic: Diagnostic = Diagnostic {
-                        file: self.filename.clone(),
-                        line: start.0,
-                        column: start.1,
-                        message: format!("Unexpected text: {}", current),
-                        suggestion: None,
-                    };
-                    diagnostic.out(source_code);
-                    exit(7);
-                }
-            }
-            else if char.is_ascii_digit() {
-                let mut current = String::from(format!("{}", char));
-                while let Some(c) = self.peek(0) {
-                    if c.is_ascii_digit() {
-                        current = format!("{}{}", current, c);
-                        self.consume(0);
+            } else if char.is_numeric() {
+                let start: usize = self.cl.clone() as usize;
+                let mut current = String::new();
+                current.push(char);
+                while let Some(next_char) = self.peek(0) {
+                    if next_char.is_numeric() {
+                        current.push(self.consume(0).unwrap());
                     } else {
                         break;
                     }
                 }
                 tokens.push(Token {
-                    token_type: TokenType::IntegerLiteral,
-                    value: Some(current),
                     line: self.ln,
-                    column: self.cl
+                    column: start,
+                    token_type: TokenType::IntLiteral,
+                    value: Some(TokenValue::IntLiteral(current.parse::<u64>().unwrap())),
                 });
-            }
-            else if char == ';' {
+            } else if char == '-' {
+                if let Some(next_char) = self.peek(0) {
+                    if next_char == '>' {
+                        self.consume(0);
+                        tokens.push(Token {
+                            line: self.ln,
+                            column: self.cl,
+                            token_type: TokenType::ThinArrow,
+                            value: None,
+                        });
+                        expected = Some(TokenType::TypeIdent);
+                    } else {
+                        Diagnostic {
+                            file: self.filename.clone(),
+                            line: self.ln,
+                            column: self.cl,
+                            message: "Unexpected '-' character".to_string(),
+                            suggestion: Some("Did you mean '->'?".to_string()),
+                        }
+                        .out(source_code);
+                    }
+                }
+            } else if char == ';' {
                 tokens.push(Token {
+                    line: self.ln,
+                    column: self.cl,
                     token_type: TokenType::Semicolon,
                     value: None,
-                    line: self.ln,
-                    column: self.cl
                 });
-            }
-            else if char.is_whitespace() {}
-            else if char == '/' /* comment checking - division not implemented yet */ {
-                if let None = self.peek(0) {
-                    let diagnostic: Diagnostic = Diagnostic {
-                        file: self.filename.clone(),
-                        line: self.ln,
-                        column: self.cl,
-                        message: String::from("Unexpected slash character (at EOF)"),
-                        suggestion: Some(String::from("division not implemented yet - maybe you meant to add a comment?")),
-                    };
-                    diagnostic.out(source_code);
-                    exit(7);
-                }
-                let next = self.consume(0).unwrap();
-                let mut comment_type: CommentType = CommentType::Line;
-                if next == '/' {}
-                else if next == '*' {comment_type = CommentType::Block;}
-                else {
-                    let diagnostic: Diagnostic = Diagnostic {
-                        file: self.filename.clone(),
-                        line: self.ln,
-                        column: self.cl,
-                        message: format!("Unexpected comment initalizer: {}", next),
-                        suggestion: Some(String::from("division not implemented yet. * or / expected after slash characters, since comment initialization is assumed.")),
-                    };
-                    diagnostic.out(source_code);
-                    exit(7);
-                }
-                if let CommentType::Line = comment_type {
-                    while self.consume(0).unwrap_or('\n') != '\n' {}
-                }
-                else if let CommentType::Block = comment_type {
-                    let mut previous: char = '*';
-                    while let Some(char) = self.consume(0) {
-                        if format!("{}{}", previous, char) == "*/" {
-                            break;
-                        }
-                        previous = char;
-                    }
-                }
-            }
-            else {
+            } else if char == '(' {
+                tokens.push(Token {
+                    line: self.ln,
+                    column: self.cl,
+                    token_type: TokenType::OpenParen,
+                    value: None,
+                });
+                expected = Some(TokenType::ParemeterTuple);
+            } else if char == ')' {
+                tokens.push(Token {
+                    line: self.ln,
+                    column: self.cl,
+                    token_type: TokenType::CloseParen,
+                    value: None,
+                });
+                expected = None;
+            } else if char == '{' {
+                tokens.push(Token {
+                    line: self.ln,
+                    column: self.cl,
+                    token_type: TokenType::OpenCurly,
+                    value: None,
+                });
+            } else if char == '}' {
+                tokens.push(Token {
+                    line: self.ln,
+                    column: self.cl,
+                    token_type: TokenType::CloseCurly,
+                    value: None,
+                });
+            } else if char.is_whitespace() {
+                continue;
+            } else {
                 let diagnostic: Diagnostic = Diagnostic {
-                        file: self.filename.clone(),
-                        line: self.ln,
-                        column: self.cl,
-                        message: format!("Unexpected character: {}", char),
-                        suggestion: None,
-                    };
-                    diagnostic.out(source_code);
-                    exit(7);
+                    file: self.filename.clone(),
+                    line: self.ln,
+                    column: self.cl,
+                    message: format!("Unexpected character: '{}'", char),
+                    suggestion: None,
+                };
+                diagnostic.out(source_code);
+                exit(7);
             }
         }
         tokens

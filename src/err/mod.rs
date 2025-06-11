@@ -1,4 +1,4 @@
-use terminal_size::{Width, Height, terminal_size};
+use terminal_size::{Height, Width, terminal_size};
 
 pub struct Diagnostic {
     pub file: String,
@@ -17,11 +17,7 @@ impl Diagnostic {
 
         eprintln!(
             "{}{}error:{} {} at {}:{}:{}",
-            BOLD, RED, RESET,
-            self.message,
-            self.file,
-            self.line,
-            self.column
+            BOLD, RED, RESET, self.message, self.file, self.line, self.column
         );
 
         render_snippet(source_code, (self.line, self.column));
@@ -64,8 +60,12 @@ fn render_snippet(source_code: &String, problem: (usize, usize)) {
     let start = problem.0.saturating_sub(3);
     let end = (problem.0 + 2).min(num_lines);
 
-    println!("{}┼{}─", "─".repeat(line_num_width + 1), "─".repeat(width - line_num_width - 4));
-    
+    println!(
+        "{}┼{}─",
+        "─".repeat(line_num_width + 1),
+        "─".repeat(width - line_num_width - 4)
+    );
+
     if start > 0 {
         println!("{} │ ...", " ".repeat(line_num_width));
     }
@@ -78,7 +78,12 @@ fn render_snippet(source_code: &String, problem: (usize, usize)) {
         }
         println!("{:>width$} │ {}", i + 1, line, width = line_num_width);
         if i + 1 == problem.0 {
-            println!("{} │ {}{}", " ".repeat(line_num_width), " ".repeat(problem.1 - 2), "^");
+            println!(
+                "{} │ {}{}",
+                " ".repeat(line_num_width),
+                " ".repeat(problem.1 - 2),
+                "^"
+            );
         }
     }
 
