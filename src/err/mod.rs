@@ -1,6 +1,8 @@
+use std::process::exit;
+
 use terminal_size::{Height, Width, terminal_size};
 
-pub struct Diagnostic {
+struct Diagnostic {
     pub file: String,
     pub line: usize,
     pub column: usize,
@@ -9,7 +11,7 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn out(self, source_code: &String) {
+    pub fn out(self, source_code: &str) {
         // ANSI color codes
         const RED: &str = "\x1b[31m";
         const BOLD: &str = "\x1b[1m";
@@ -52,7 +54,7 @@ fn digit_count(num: i32) -> usize {
     count
 }
 
-fn render_snippet(source_code: &String, problem: (usize, usize)) {
+fn render_snippet(source_code: &str, problem: (usize, usize)) {
     let width = get_terminal_width();
     let lines: Vec<&str> = source_code.lines().collect();
     let num_lines = lines.len();
@@ -89,5 +91,30 @@ fn render_snippet(source_code: &String, problem: (usize, usize)) {
 
     if end < num_lines {
         println!("{} │ ...", " ".repeat(line_num_width));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ErrorHandler {
+    pub source_code: String,
+    pub filename: String,
+}
+
+impl ErrorHandler {
+    pub fn new(source_code: String, filename: &str) -> Self {
+        Self {
+            source_code,
+            filename: filename.to_string(),
+        }
+    }
+    pub fn err(&self, line: usize, column: usize, message: String, suggestion: Option<String>) {
+        Diagnostic {
+            file: self.filename.clone(),
+            line,
+            column,
+            message,
+            suggestion
+        }.out(&self.source_code);
+        exit(1);
     }
 }

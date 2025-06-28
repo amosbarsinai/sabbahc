@@ -1,6 +1,6 @@
-use std::process::exit;
+use std::fmt;
 
-use crate::err::Diagnostic;
+use crate::err::ErrorHandler;
 use crate::typing::{Type, BUILTIN_TYPES};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -9,7 +9,6 @@ pub enum TokenType {
     FunctionIdent,
     ThinArrow,
     TypeIdent,
-    ParemeterTuple,
     OpenParen,
     CloseParen,
     OpenCurly,
@@ -18,38 +17,74 @@ pub enum TokenType {
     IntLiteral,
     Semicolon,
 }
+impl fmt::Display for TokenType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FunctionKeyword => write!(f, "FunctionKeyword"),
+            Self::FunctionIdent => write!(f, "FunctionIdent"),
+            Self::ThinArrow => write!(f, "ThinArrow"),
+            Self::TypeIdent => write!(f, "TypeIdent"),
+            Self::OpenParen => write!(f, "OpenParen"),
+            Self::CloseParen => write!(f, "CloseParen"),
+            Self::OpenCurly => write!(f, "OpenCurly"),
+            Self::CloseCurly => write!(f, "CloseCurly"),
+            Self::ReturnKeyword => write!(f, "ReturnKeyword"),
+            Self::IntLiteral => write!(f, "IntLiteral"),
+            Self::Semicolon => write!(f, "Semicolon"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum TokenValue {
+pub enum TokenValue<'a> {
     FunctionIdent(String),
-    TypeIdent(Type),
+    TypeIdent(&'a Type),
     IntLiteral(u64),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Token {
+pub struct Token<'a> {
     pub line: usize,
     pub column: usize,
     pub token_type: TokenType,
-    pub value: Option<TokenValue>,
+    pub value: Option<TokenValue<'a>>,
 }
+
+impl<'a> Token<'a> {
+    pub fn get_funcid(&self) -> String {
+        if let Some(TokenValue::FunctionIdent(ref ident)) = self.value {
+            return ident.clone();
+        } else {
+            panic!("token is not a function identifier");
+        }
+    }
+}
+
+impl<'a> fmt::Display for Token<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} Token", self.token_type)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Tokenizer {
+pub struct Tokenizer<'a> {
     input: String,
     index: u64,
     ln: usize,
     cl: usize,
     filename: String,
+    error_handler: &'a ErrorHandler
 }
 
-impl Tokenizer {
-    pub fn new(input: &String, filename: String) -> Self {
+impl<'a> Tokenizer<'a> {
+    pub fn new(input: &String, filename: String, error_handler: &'a ErrorHandler) -> Self {
         Tokenizer {
             input: input.clone(),
             index: 0,
             ln: 1,
             cl: 1,
             filename,
+            error_handler
         }
     }
     fn peek(&self, index: u8) -> Option<char> {
@@ -79,8 +114,6 @@ impl Tokenizer {
 
     pub fn tokenize(&mut self) -> Vec<Token> {
         let mut func_idents: Vec<String> = Vec::new();
-        let type_idents: Vec<String> = BUILTIN_TYPES.keys().cloned().collect(); // I didn't implement struct creation yet - no need for the variable to be mutable
-        let source_code = &self.input.clone();
         let mut tokens: Vec<Token> = Vec::new();
 
         let mut expected: Option<TokenType> = None;
@@ -130,24 +163,21 @@ impl Tokenizer {
                             });
                             func_idents.push(current.clone());
                             expected = None;
-                        } else {
-                            if type_idents.contains(&current) {
+                        } else if expected == Some(TokenType::TypeIdent) {
+                            if BUILTIN_TYPES.contains_key(&current) {
                                 tokens.push(Token {
                                     line: self.ln,
                                     column: start,
                                     token_type: TokenType::TypeIdent,
-                                    value: Some(TokenValue::TypeIdent(BUILTIN_TYPES.get(&current).unwrap().clone())),
+                                    value: Some(TokenValue::TypeIdent(&BUILTIN_TYPES.get(&current).unwrap())),
                                 });
                             } else {
-                                Diagnostic {
-                                    file: self.filename.clone(),
-                                    line: self.ln,
-                                    column: start,
-                                    message: format!("Unexpected text: \"{}\"", current),
-                                    suggestion: None,
-                                }
-                                .out(source_code);
-                                exit(1);
+                                self.error_handler.err(
+                                    self.ln,
+                                    start,
+                                    format!("No such type: \"{}\"", current),
+                                    None,
+                                );
                             }
                         }
                     }
@@ -181,14 +211,12 @@ impl Tokenizer {
                         });
                         expected = Some(TokenType::TypeIdent);
                     } else {
-                        Diagnostic {
-                            file: self.filename.clone(),
-                            line: self.ln,
-                            column: self.cl,
-                            message: "Unexpected '-' character".to_string(),
-                            suggestion: Some("Did you mean '->'?".to_string()),
-                        }
-                        .out(source_code);
+                        self.error_handler.err(
+                            self.ln,
+                            self.cl,
+                            String::from("Unexpected dash character '-'"),
+                            Some(String::from("Maybe you meant to add a thin arrow?"))
+                        );
                     }
                 }
             } else if char == ';' {
@@ -205,7 +233,6 @@ impl Tokenizer {
                     token_type: TokenType::OpenParen,
                     value: None,
                 });
-                expected = Some(TokenType::ParemeterTuple);
             } else if char == ')' {
                 tokens.push(Token {
                     line: self.ln,
@@ -231,15 +258,12 @@ impl Tokenizer {
             } else if char.is_whitespace() {
                 continue;
             } else {
-                let diagnostic: Diagnostic = Diagnostic {
-                    file: self.filename.clone(),
-                    line: self.ln,
-                    column: self.cl,
-                    message: format!("Unexpected character: '{}'", char),
-                    suggestion: None,
-                };
-                diagnostic.out(source_code);
-                exit(7);
+                self.error_handler.err(
+                    self.ln,
+                    self.cl,
+                    format!("Unexpected character '{}'", char),
+                    None,
+                );
             }
         }
         tokens

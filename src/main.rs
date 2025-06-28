@@ -3,7 +3,9 @@ use std::path::Path;
 use std::process::Command;
 use std::process::exit;
 
-// mod compiler;
+use crate::err::ErrorHandler;
+
+mod codegen;
 mod err;
 mod structure;
 mod tokenizer;
@@ -156,10 +158,10 @@ impl CLIInstructions {
 
 const VERSION: &str = "0.0.1";
 
-fn find_empty_temp_filename() -> String {
+fn find_free_filename(ext: &str) -> String {
     let mut counter = 0;
     loop {
-        let filename = format!("out{}.tmp", counter);
+        let filename = format!("out{}.{}", counter, ext);
         if !Path::new(&filename).exists() {
             return filename;
         }
@@ -168,6 +170,9 @@ fn find_empty_temp_filename() -> String {
 }
 
 fn main() {
+    // Start the timer - how long does it take to compile?
+    let start_time = std::time::Instant::now();
+
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 1 {
         print!("{}", HELP);
@@ -201,82 +206,26 @@ fn main() {
     }
     let input =
         std::fs::read_to_string(instructions.input.clone()).expect("Failed to read input file");
-    let mut tokenizer = tokenizer::Tokenizer::new(&input, instructions.input.clone());
+
+    let error_handler = ErrorHandler {
+        source_code: input.clone(),
+        filename: instructions.input.clone()
+    };
+    let mut tokenizer = tokenizer::Tokenizer::new(&input, instructions.input.clone(), &error_handler);
     let tokenized: Vec<tokenizer::Token> = tokenizer.tokenize();
     
-    let parser = structure::parser::Parser::new(tokenized, input.clone());
-    let parsed: structure::Scope = parser.parse(instructions.input.clone());
-
-    for statement in parsed.children {
-        println!("{:?}", statement);
-    }
-
-    // let mut compiler = compiler::Compiler::new(parsed);
-    // let compiled: String = compiler.compile();
-
-    // match instructions.mode {
-    //     OutputMode::Assembly => {
-    //         let mut output = std::fs::File::create(instructions.output.clone()).unwrap();
-    //         output.write_all(compiled.as_bytes()).unwrap();
-    //         println!(
-    //             "Successfully compiled to file \"{}\"",
-    //             instructions.output.clone()
-    //         );
-    //     }
-    //     OutputMode::Object => {
-    //         let asm_output = find_empty_temp_filename();
-    //         let mut asm_file = std::fs::File::create(asm_output.clone()).unwrap();
-    //         asm_file.write_all(compiled.as_bytes()).unwrap();
-    //         let object_output = instructions.output.clone();
-    //         let assembler_output = Command::new("gcc")
-    //             .arg("-o")
-    //             .arg(format!("{}", instructions.output.clone()))
-    //             .arg("-x")
-    //             .arg("assembler")
-    //             .arg("-nostdlib")
-    //             .arg("-static")
-    //             .arg("-c")
-    //             .arg(format!("{}", asm_output))
-    //             .output()
-    //             .expect("Failed to execute assembler!");
-    //         if assembler_output.status.success() {
-    //             println!("Successfully assembled to file \"{}\"", object_output);
-    //         } else {
-    //             println!(
-    //                 "Assembler failed with error: {}",
-    //                 String::from_utf8_lossy(&assembler_output.stderr)
-    //             );
-    //             exit(11);
-    //         }
-    //         std::fs::remove_file(asm_output).expect("Failed to remove temporary asm file");
-    //     }
-    //     OutputMode::BinaryExecutable => {
-    //         let asm_output = find_empty_temp_filename();
-    //         let mut asm_file = std::fs::File::create(asm_output.clone()).unwrap();
-    //         asm_file.write_all(compiled.as_bytes()).unwrap();
-    //         let assembler_output = Command::new("gcc")
-    //             .arg("-o")
-    //             .arg(format!("{}", instructions.output.clone()))
-    //             .arg("-x")
-    //             .arg("assembler")
-    //             .arg("-nostdlib")
-    //             .arg("-static")
-    //             .arg(format!("{}", asm_output))
-    //             .output()
-    //             .expect("Failed to execute assembler!");
-    //         if assembler_output.status.success() {
-    //             println!(
-    //                 "Successfully compiled to file \"{}\"",
-    //                 instructions.output.clone()
-    //             );
-    //         } else {
-    //             println!(
-    //                 "Assembler failed with error: {}",
-    //                 String::from_utf8_lossy(&assembler_output.stderr)
-    //             );
-    //             exit(11);
-    //         }
-    //         std::fs::remove_file(asm_output).expect("Failed to remove temporary asm file");
-    //     }
-    // }
+    let mut parser = structure::parser::Parser::new(&tokenized, &error_handler);
+    let parsed: structure::Scope = parser.parse();
+    
+    let mut codegener = codegen::CodeGenerator::new(
+        parsed,
+        &error_handler,
+    );
+    
+    let elapsed = start_time.elapsed();
+    println!(
+        "Compilation completed in {}.{:03} seconds",
+        elapsed.as_secs(),
+        elapsed.subsec_millis()
+    );
 }

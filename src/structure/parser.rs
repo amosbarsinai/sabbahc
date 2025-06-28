@@ -1,180 +1,161 @@
 use crate::{
-    err::Diagnostic,
-    structure::*,
-    tokenizer::{Token, TokenType, TokenValue}, typing::INT8,
+    err::ErrorHandler, structure::*, tokenizer::{Token, TokenType, TokenValue}, typing::UINT8
 };
-use std::process::exit;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Parser {
-    input: Vec<Token>,
-    source_code: String,
+pub struct Parser<'a> {
+    input: &'a [Token<'a>],
+    index: u64,
+    error_handler: &'a ErrorHandler
 }
 
-impl Parser {
-    pub fn new(input: Vec<Token>, source_code: String) -> Self {
-        Self { input, source_code }
+impl<'a> Parser<'a> {
+    pub fn new(input: &'a [Token<'a>], error_handler: &'a ErrorHandler) -> Self {
+        Self { input, index: 0, error_handler }
     }
-
-    fn peek(&self, index: usize) -> Option<&Token> {
-        self.input.get(index)
+    fn peek(&self) -> Option<Token<'a>> {
+        self.input.get(self.index as usize).cloned()
     }
-
-    fn parse_slice(&self, start: usize, end: usize, outer: bool, filename: &str) -> Scope {
+    pub fn parse<'b>(&mut self) -> Scope<'b> where 'a: 'b {
         let mut parsed = Scope {
-            children: Vec::new(),
-            is_outer: outer,
+            children: Vec::new()
         };
-
-        let mut index = start;
-        while index < end {
-            let mut current = Statement::new();
-            let token = match self.input.get(index) {
-                Some(t) => t,
-                None => break,
-            };
-
+        let mut current = Statement::new();
+        loop {
+            let token = self.input.get(self.index as usize).cloned();
+            if token.is_none() {
+                break;
+            }
+            let token = token.unwrap();
+            self.index += 1;
             match token.token_type {
-                TokenType::OpenCurly => {
-                    let mut depth = 1;
-                    let mut close_index = index + 1;
-                    while close_index < end && depth > 0 {
-                        match self.input[close_index].token_type {
-                            TokenType::OpenCurly => depth += 1,
-                            TokenType::CloseCurly => depth -= 1,
-                            _ => {}
+                TokenType::FunctionKeyword => {current.push(AstNodeType::fk());}
+                TokenType::FunctionIdent => {current.push(AstNode::fi(token.get_funcid()));}
+                TokenType::OpenParen => {
+                    // Assume function parameter tuple
+                    // Functions do not yet have parameters
+                    let next_token = self.input.get(self.index as usize).cloned();
+                    self.index += 1;
+                    if let Some(some_token) = next_token {
+                        if let TokenType::CloseParen = some_token.token_type {
+                            current.push(AstNode::tup());
                         }
-                        close_index += 1;
-                    }
-
-                    if depth != 0 {
-                        Diagnostic {
-                            file: filename.to_string(),
-                            line: token.line,
-                            column: token.column,
-                            message: "Unmatched '{'".to_string(),
-                            suggestion: None,
-                        }
-                        .out(&self.source_code);
-                        exit(1);
-                    }
-
-                    // Recursively parse inner scope
-                    let inner_scope = self.parse_slice(index + 1, close_index - 1, false, filename);
-
-                    index = close_index; // Continue after the matching '}'
-
-                    current.add_child(
-                        AstNode {
-                            node_type: AstNodeType::Scope,
-                            value: Some(
-                                AstNodeValue::Scope(
-                                    inner_scope
-                                )
+                        else {
+                            self.error_handler.err(
+                                some_token.line,
+                                some_token.column,
+                                format!("Expected closing parentheses (found {})", some_token),
+                                None,
                             )
                         }
+                    }
+                }
+                TokenType::CloseParen => {
+                    self.error_handler.err(
+                        token.line,
+                        token.column,
+                        String::from("Unexpected closing parentheses"),
+                        None,
                     )
                 }
-                TokenType::CloseCurly => {
-                    Diagnostic {
-                        file: filename.to_string(),
-                        line: token.line,
-                        column: token.column,
-                        message: format!("Unmatched '}}'"),
-                        suggestion: None,
-                    }.out(&self.source_code);
-                    exit(1);
-                }
-                TokenType::FunctionKeyword => {
-                    current.add_child(AstNode { node_type: AstNodeType::FunctionKeyword, value: None })
-                }
-                TokenType::ReturnKeyword => {
-                    current.add_child(AstNode { node_type: AstNodeType::ReturnKeyword, value: None });
-                }
-                TokenType::IntLiteral => {
-                    if let TokenValue::IntLiteral(value) = token.clone().value.unwrap() {
-                        if value >= u8::MIN as u64 && value <= u8::MAX as u64 {
-                            current.add_child(
-                                AstNode {
-                                    node_type: AstNodeType::Expression,
-                                    value: Some(
-                                        AstNodeValue::Expression(
-                                            Expression {
-                                                eval_type: INT8.to_owned(),
-                                                content: vec![
-                                                    ExpressionContent::UnsignedInt8Literal(
-                                                        value as u8
-                                                    )
-                                                ]
-                                            }
-                                        )
-                                    )
-                                }
-                            );
+                TokenType::ThinArrow => {
+                    // Expect following TypeIdent
+                    let next_token = self.peek();
+                    if let Some(some_token) = next_token {
+                        if let TokenType::TypeIdent = some_token.token_type {
+                            if let TokenValue::TypeIdent(ident) = some_token.value.unwrap() {
+                                current.push(AstNode::ti(ident));
+                                self.index += 1;
+                            }
                         } else {
-                            Diagnostic {
-                                file: filename.to_string(),
-                                line: token.line,
-                                column: token.column,
-                                message: String::from("Integer values are capped at 255"),
-                                suggestion: None,
-                            }.out(&self.source_code);
-                            exit(1);
+                            self.error_handler.err(
+                                some_token.line,
+                                some_token.column,
+                                String::from("Expected type identifier after ->"),
+                                None
+                            );
+                        }
+                    } else {
+                        self.error_handler.err(
+                            token.line,
+                            token.column,
+                            String::from("Unexpected EOF (expected type identifier after ->)"),
+                            None,
+                        )
+                    }
+                }
+                TokenType::TypeIdent => {
+                    self.error_handler.err(
+                        token.line,
+                        token.column,
+                        String::from("Unexpected type identifier"),
+                        None,
+                    )
+                }
+                TokenType::OpenCurly => {
+                    let mut depth = 1;
+                    let start_index = self.index as usize;
+                    while depth > 0 {
+                        if let Some(token) = self.input.get(self.index as usize) {
+                            match token.token_type {
+                                TokenType::OpenCurly => depth += 1,
+                                TokenType::CloseCurly => depth -= 1,
+                                _ => {}
+                            }
+                            self.index += 1;
+                        } else {
+                            self.error_handler.err(
+                                token.line,
+                                token.column,
+                                String::from("Unexpected EOF while parsing scope"),
+                                None,
+                            );
+                            break;
                         }
                     }
+                    // Exclude the last CloseCurly
+                    let end_index: usize = self.index as usize - 1;
+                    let scope_tokens_slice: &'b [Token<'b>] = &self.input[start_index..end_index];
+                    let mut inner_parser = Parser::<'b>::new(scope_tokens_slice, self.error_handler);
+                    let inner_scope = inner_parser.parse();
+                    current.push(AstNode::scope(inner_scope.clone()));
+
+                    // Don't handle pro-scope tokens yet
+                    parsed.children.push(current);
+                    current = Statement::new();
                 }
-                TokenType::FunctionIdent => {
-                    if let Some(TokenValue::FunctionIdent(ident)) = &token.value {
-                        current.add_child(AstNode {
-                            node_type: AstNodeType::FunctionIdent,
-                            value: Some(AstNodeValue::FunctionIdent(ident.clone()))
-                        });
-                    }
-                    else {
-                        Diagnostic {
-                            file: filename.to_string(),
-                            line: token.line,
-                            column: token.column,
-                            message: format!("Something went wrong with the compiler. FunctionIdent value is null"),
-                            suggestion: None,
-                        }.out(&self.source_code);
-                        exit(1);
-                    }
-                }
-                TokenType::OpenParen | TokenType::CloseParen => {
-                    // i didn't implement signatures yet
-                }
-                TokenType::ThinArrow => {
-                    // for return types
-                }
-                TokenType::TypeIdent => { // function return type
-                    if let Some(TokenValue::TypeIdent(ident)) = &token.value {
-                        current.add_child(AstNode {
-                            node_type: AstNodeType::FunctionReturnTypeAnnotation,
-                            value: Some(AstNodeValue::FunctionReturnTypeAnnotation(ident.clone()))
-                        });
+                TokenType::ReturnKeyword => {
+                    let next_token = self.peek();
+                    if let Some(some_token) = next_token {
+                        if let TokenType::IntLiteral = some_token.token_type {
+                            if let TokenValue::IntLiteral(value) = some_token.value.unwrap() {
+                                current.push(AstNode::ret(value as u8));
+                                self.index += 1;
+                            }
+                        } else {
+                            self.error_handler.err(
+                                some_token.line,
+                                some_token.column,
+                                String::from("Expected integer literal after return keyword"),
+                                None,
+                            );
+                        }
+                    } else {
+                        self.error_handler.err(
+                            token.line,
+                            token.column,
+                            String::from("Unexpected EOF (expected statement end after return)"),
+                            None,
+                        );
                     }
                 }
                 TokenType::Semicolon => {
                     parsed.children.push(current);
+                    current = Statement::new();
                 }
-                _ => {
-                    Diagnostic {
-                        file: filename.to_string(),
-                        line: token.line,
-                        column: token.column,
-                        message: format!("Unrecognized token: {:?}", token),
-                        suggestion: None,
-                    }.out(&self.source_code);
-                    exit(1);
-                }
+                _ => {}
             }
-            index += 1;
         }
         parsed
-    }
-
-    pub fn parse(&self, filename: String) -> Scope {
-        self.parse_slice(0, self.input.len(), true, &filename)
     }
 }
