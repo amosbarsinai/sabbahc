@@ -207,10 +207,10 @@ fn main() {
     let input =
         std::fs::read_to_string(instructions.input.clone()).expect("Failed to read input file");
 
-    let error_handler = ErrorHandler {
-        source_code: input.clone(),
-        filename: instructions.input.clone()
-    };
+    let error_handler = ErrorHandler::new(
+        input.clone(),
+        instructions.input.as_str()
+    );
     let mut tokenizer = tokenizer::Tokenizer::new(&input, instructions.input.clone(), &error_handler);
     let tokenized: Vec<tokenizer::Token> = tokenizer.tokenize();
     
@@ -221,6 +221,8 @@ fn main() {
         parsed,
         &error_handler,
     );
+    let generated = codegener.out();
+    println!("Generated code:\n{}", generated);
     
     let elapsed = start_time.elapsed();
     println!(

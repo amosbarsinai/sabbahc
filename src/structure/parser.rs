@@ -29,8 +29,8 @@ impl<'a> Parser<'a> {
             let token = token.unwrap();
             self.index += 1;
             match token.token_type {
-                TokenType::FunctionKeyword => {current.push(AstNodeType::fk());}
-                TokenType::FunctionIdent => {current.push(AstNode::fi(token.get_funcid()));}
+                TokenType::FunctionKeyword => {current.push(AstNodeType::fk(token.line, token.column));}
+                TokenType::FunctionIdent => {current.push(AstNode::fi(token.get_funcid(), token.line, token.column));}
                 TokenType::OpenParen => {
                     // Assume function parameter tuple
                     // Functions do not yet have parameters
@@ -38,7 +38,7 @@ impl<'a> Parser<'a> {
                     self.index += 1;
                     if let Some(some_token) = next_token {
                         if let TokenType::CloseParen = some_token.token_type {
-                            current.push(AstNode::tup());
+                            current.push(AstNode::tup(token.line, token.column));
                         }
                         else {
                             self.error_handler.err(
@@ -64,7 +64,7 @@ impl<'a> Parser<'a> {
                     if let Some(some_token) = next_token {
                         if let TokenType::TypeIdent = some_token.token_type {
                             if let TokenValue::TypeIdent(ident) = some_token.value.unwrap() {
-                                current.push(AstNode::ti(ident));
+                                current.push(AstNode::ti(ident, token.line, token.column));
                                 self.index += 1;
                             }
                         } else {
@@ -118,7 +118,7 @@ impl<'a> Parser<'a> {
                     let scope_tokens_slice: &'b [Token<'b>] = &self.input[start_index..end_index];
                     let mut inner_parser = Parser::<'b>::new(scope_tokens_slice, self.error_handler);
                     let inner_scope = inner_parser.parse();
-                    current.push(AstNode::scope(inner_scope.clone()));
+                    current.push(AstNode::scope(inner_scope.clone(), token.line, token.column));
 
                     // Don't handle pro-scope tokens yet
                     parsed.children.push(current);
@@ -129,7 +129,7 @@ impl<'a> Parser<'a> {
                     if let Some(some_token) = next_token {
                         if let TokenType::IntLiteral = some_token.token_type {
                             if let TokenValue::IntLiteral(value) = some_token.value.unwrap() {
-                                current.push(AstNode::ret(value as u8));
+                                current.push(AstNode::ret(value as u8, token.line, token.column));
                                 self.index += 1;
                             }
                         } else {

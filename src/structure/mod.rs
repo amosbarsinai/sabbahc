@@ -16,8 +16,8 @@ pub enum AstNodeType {
 }
 
 impl AstNodeType {
-    pub fn fk<'a>() -> AstNode<'a> {
-        AstNode { node_type: Self::FunctionKeyword, value: None }
+    pub fn fk<'a>(line: usize, column: usize) -> AstNode<'a> {
+        AstNode { node_type: Self::FunctionKeyword, value: None, line, column }
     }
 }
 
@@ -34,48 +34,60 @@ pub enum AstNodeValue<'a> {
 pub struct AstNode<'a> {
     pub node_type: AstNodeType,
     pub value: Option<AstNodeValue<'a>>,
+    pub line: usize,
+    pub column: usize,
 }
 
 impl<'a> AstNode<'a> {
-    pub fn scope(input: Scope<'a>) -> AstNode<'a> {
+    pub fn scope(input: Scope<'a>, line: usize, column: usize) -> AstNode<'a> {
         AstNode {
             node_type: AstNodeType::Scope,
             value: Some(
                 AstNodeValue::Scope(
                     input
                 )
-            )
+            ),
+            line,
+            column
         }
     }
-    pub fn ret(content: u8) -> AstNode<'a> {
+    pub fn ret(content: u8, line: usize, column: usize) -> AstNode<'a> {
         AstNode {
             node_type: AstNodeType::ReturnKeyword,
             value: Some(AstNodeValue::Expression(Expression {
                 eval_type: &UINT8,
                 content // Placeholder for return expression
-            }))
+            })),
+            line,
+            column
         }
     }
-    pub fn fi(funcident: String) -> AstNode<'a> {
+    pub fn fi(funcident: String, line: usize, column: usize) -> AstNode<'a> {
         AstNode {
             node_type: AstNodeType::FunctionIdent,
-            value: Some(AstNodeValue::FunctionIdent(funcident))
+            value: Some(AstNodeValue::FunctionIdent(funcident)),
+            line,
+            column
         }
     }
-    pub fn tup() -> AstNode<'a> {
+    pub fn tup(line: usize, column: usize) -> AstNode<'a> {
         AstNode {
             node_type: AstNodeType::ParamTypeTuple,
             value: Some(AstNodeValue::ParamTypeTuple(
                 ParamTypeTuple {}
-            ))
+            )),
+            line,
+            column
         }
     }
-    pub fn ti(typeident: &'a Type) -> AstNode<'a> {
+    pub fn ti(typeident: &'a Type, line: usize, column: usize) -> AstNode<'a> {
         AstNode {
             node_type: AstNodeType::TypeIdent,
             value: Some(
                 AstNodeValue::TypeIdent(typeident)
-            )
+            ),
+            line,
+            column
         }
     }
 }
