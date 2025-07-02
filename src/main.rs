@@ -1,4 +1,6 @@
+use std::fs::File;
 use std::io::Write;
+use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
 use std::process::exit;
@@ -161,7 +163,7 @@ const VERSION: &str = "0.0.1";
 fn find_free_filename(ext: &str) -> String {
     let mut counter = 0;
     loop {
-        let filename = format!("out{}.{}", counter, ext);
+        let filename = format!("tmp{}.{}", counter, ext);
         if !Path::new(&filename).exists() {
             return filename;
         }
@@ -222,7 +224,52 @@ fn main() {
         &error_handler,
     );
     let generated = codegener.out();
-    println!("Generated code:\n{}", generated);
+
+    match instructions.mode {
+        OutputMode::Assembly => {
+            {
+                let mut file = File::create(instructions.output.as_str()).unwrap();
+                write!(file, "{}", generated);
+            }
+        }
+        OutputMode::Object => {
+            let assembly_filename = find_free_filename("s");
+            {
+                let mut file = File::create(assembly_filename.clone()).unwrap();
+                write!(file, "{}", generated);
+            }
+            Command::new("as")
+                .arg(assembly_filename.clone())
+                .arg("-o")
+                .arg(instructions.output)
+                .output()
+                .expect("Assembler error");
+            std::fs::remove_file(assembly_filename);
+        }
+        OutputMode::BinaryExecutable => {
+            let assembly_filename = find_free_filename("s");
+            let object_filename = find_free_filename("o");
+            {
+                let mut file = File::create(assembly_filename.clone()).unwrap();
+                write!(file, "{}", generated);
+            }
+            Command::new("as")
+                .arg(assembly_filename.clone())
+                .arg("-o")
+                .arg(object_filename.clone())
+                .output()
+                .expect("Assembler error");
+            Command::new("ld")
+                .arg("-o")
+                .arg(instructions.output)
+                .arg("runtime.o")
+                .arg(object_filename.clone())
+                .output()
+                .expect("Linker error");
+            std::fs::remove_file(assembly_filename);
+            std::fs::remove_file(object_filename);
+        }
+    }
     
     let elapsed = start_time.elapsed();
     println!(
