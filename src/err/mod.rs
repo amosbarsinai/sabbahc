@@ -8,6 +8,7 @@ struct Diagnostic {
     pub column: usize,
     pub message: String,
     pub suggestion: Option<String>,
+    pub comperr: bool
 }
 
 impl Diagnostic {
@@ -16,6 +17,10 @@ impl Diagnostic {
         const RED: &str = "\x1b[31m";
         const BOLD: &str = "\x1b[1m";
         const RESET: &str = "\x1b[0m";
+
+        if self.comperr {
+            print!("[internal compiler error]");
+        }
 
         eprintln!(
             "{}{}error:{} {} at {}:{}:{}",
@@ -113,7 +118,19 @@ impl ErrorHandler {
             line,
             column,
             message,
-            suggestion
+            suggestion,
+            comperr: false,
+        }.out(&self.source_code);
+        exit(1);
+    }
+    pub fn comperr(&self, line: usize, column: usize, message: String, suggestion: Option<String>) {
+        Diagnostic {
+            file: self.filename.clone(),
+            line,
+            column,
+            message,
+            suggestion,
+            comperr: true
         }.out(&self.source_code);
         exit(1);
     }

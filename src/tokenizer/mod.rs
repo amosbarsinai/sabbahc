@@ -87,16 +87,16 @@ impl<'a> Tokenizer<'a> {
             error_handler
         }
     }
-    fn peek(&self, index: u8) -> Option<char> {
-        let peek_index = self.index + index as u64;
+    fn peek(&self) -> Option<char> {
+        let peek_index = self.index;
         if peek_index >= self.input.len() as u64 {
             return None;
         }
         let char = self.input.chars().nth(peek_index as usize).unwrap();
         Some(char)
     }
-    fn consume(&mut self, index: u8) -> Option<char> {
-        let mut consume_index = self.index + index as u64;
+    fn consume(&mut self) -> Option<char> {
+        let mut consume_index = self.index;
         if consume_index >= self.input.len() as u64 {
             return None;
         }
@@ -111,161 +111,175 @@ impl<'a> Tokenizer<'a> {
         }
         Some(char)
     }
-
-    pub fn tokenize(&mut self) -> Vec<Token> {
-        let mut func_idents: Vec<String> = Vec::new();
-        let mut tokens: Vec<Token> = Vec::new();
-
-        let mut expected: Option<TokenType> = None;
-
-        while self.index < self.input.len() as u64 {
-            let char = self.consume(0);
-            if char.is_none() {
+    pub fn consume_whitespace(&mut self) {
+        while let Some(c) = self.peek() {
+            if c.is_whitespace() {
+                self.consume();
+            } else {
                 break;
             }
-            let char = char.unwrap();
-            if char.is_alphabetic() {
-                let mut current = String::new();
-                let start: usize = self.cl.clone() as usize;
-                current.push(char);
-                while let Some(next_char) = self.peek(0) {
-                    if next_char.is_alphanumeric() || next_char == '_' {
-                        current.push(self.consume(0).unwrap());
-                    } else {
-                        break;
-                    }
-                }
-                match current.as_str() {
+        }
+    }
+    pub fn consume_word(&mut self) -> Option<String> {
+        let mut word = String::new();
+        self.consume_whitespace();
+        while let Some(c) = self.peek() {
+            if c.is_alphanumeric() || c == '_' {
+                word.push(c);
+                self.consume();
+            } else {
+                break;
+            }
+        }
+        if word.is_empty() {
+            None
+        } else {
+            Some(word)
+        }
+    }
+
+    pub fn tokenize(&mut self) -> Vec<Token> {
+        let mut tokens: Vec<Token> = Vec::new();
+
+        while let Some(c) = self.peek() {
+            if c.is_whitespace() {
+                self.consume_whitespace();
+            }
+            else if c.is_alphabetic() || c == '_' {
+                let word = self.consume_word().unwrap();
+                match word.as_str() {
                     "f" => {
                         tokens.push(Token {
                             line: self.ln,
-                            column: start,
+                            column: self.cl,
                             token_type: TokenType::FunctionKeyword,
                             value: None,
                         });
-                        expected = Some(TokenType::FunctionIdent);
+                        self.consume_whitespace();
+                        if let Some(func_name) = self.consume_word() {
+                            tokens.push(Token {
+                                line: self.ln,
+                                column: self.cl,
+                                token_type: TokenType::FunctionIdent,
+                                value: Some(TokenValue::FunctionIdent(func_name)),
+                            });
+                        } else {
+                            self.error_handler.err(
+                                self.ln,
+                                self.cl,
+                                "Expected function identifier after 'f' keyword".to_string(),
+                                None
+                            );
+                        }
                     }
                     "return" => {
                         tokens.push(Token {
                             line: self.ln,
-                            column: start,
+                            column: self.cl,
                             token_type: TokenType::ReturnKeyword,
                             value: None,
                         });
                     }
                     _ => {
-                        if expected == Some(TokenType::FunctionIdent) {
+                        if BUILTIN_TYPES.contains_key(word.as_str()) {
                             tokens.push(Token {
                                 line: self.ln,
-                                column: start,
-                                token_type: TokenType::FunctionIdent,
-                                value: Some(TokenValue::FunctionIdent(current.clone())),
+                                column: self.cl,
+                                token_type: TokenType::TypeIdent,
+                                value: Some(TokenValue::TypeIdent(&BUILTIN_TYPES[word.as_str()])),
                             });
-                            func_idents.push(current.clone());
-                            expected = None;
-                        } else if expected == Some(TokenType::TypeIdent) {
-                            if BUILTIN_TYPES.contains_key(&current) {
-                                tokens.push(Token {
-                                    line: self.ln,
-                                    column: start,
-                                    token_type: TokenType::TypeIdent,
-                                    value: Some(TokenValue::TypeIdent(&BUILTIN_TYPES.get(&current).unwrap())),
-                                });
-                            } else {
-                                self.error_handler.err(
-                                    self.ln,
-                                    start,
-                                    format!("No such type: \"{}\"", current),
-                                    None,
-                                );
-                            }
+                        } else {
+                            self.error_handler.err(
+                                self.ln,
+                                self.cl,
+                                format!("Unexpected identifier: '{}'", word),
+                                None
+                            );
                         }
                     }
                 }
-            } else if char.is_numeric() {
-                let start: usize = self.cl.clone() as usize;
-                let mut current = String::new();
-                current.push(char);
-                while let Some(next_char) = self.peek(0) {
-                    if next_char.is_numeric() {
-                        current.push(self.consume(0).unwrap());
+            } else if c.is_numeric() {
+                let mut num = String::new();
+                while let Some(c) = self.peek() {
+                    if c.is_numeric() {
+                        num.push(c);
+                        self.consume();
                     } else {
                         break;
                     }
                 }
-                tokens.push(Token {
-                    line: self.ln,
-                    column: start,
-                    token_type: TokenType::IntLiteral,
-                    value: Some(TokenValue::IntLiteral(current.parse::<u64>().unwrap())),
-                });
-            } else if char == '-' {
-                if let Some(next_char) = self.peek(0) {
-                    if next_char == '>' {
-                        self.consume(0);
-                        tokens.push(Token {
-                            line: self.ln,
-                            column: self.cl,
-                            token_type: TokenType::ThinArrow,
-                            value: None,
-                        });
-                        expected = Some(TokenType::TypeIdent);
-                    } else {
-                        self.error_handler.err(
-                            self.ln,
-                            self.cl,
-                            String::from("Unexpected dash character '-'"),
-                            Some(String::from("Maybe you meant to add a thin arrow?"))
-                        );
-                    }
-                }
-            } else if char == ';' {
+                let int_value = num.parse::<u64>().unwrap();
                 tokens.push(Token {
                     line: self.ln,
                     column: self.cl,
-                    token_type: TokenType::Semicolon,
-                    value: None,
+                    token_type: TokenType::IntLiteral,
+                    value: Some(TokenValue::IntLiteral(int_value)),
                 });
-            } else if char == '(' {
+            } else if c == '(' {
                 tokens.push(Token {
                     line: self.ln,
                     column: self.cl,
                     token_type: TokenType::OpenParen,
                     value: None,
                 });
-            } else if char == ')' {
+                self.consume();
+            } else if c == ')' {
                 tokens.push(Token {
                     line: self.ln,
                     column: self.cl,
                     token_type: TokenType::CloseParen,
                     value: None,
                 });
-                expected = None;
-            } else if char == '{' {
+                self.consume();
+            } else if c == '{' {
                 tokens.push(Token {
                     line: self.ln,
                     column: self.cl,
                     token_type: TokenType::OpenCurly,
                     value: None,
                 });
-            } else if char == '}' {
+                self.consume();
+            } else if c == '}' {
                 tokens.push(Token {
                     line: self.ln,
                     column: self.cl,
                     token_type: TokenType::CloseCurly,
                     value: None,
                 });
-            } else if char.is_whitespace() {
-                continue;
-            } else {
-                self.error_handler.err(
-                    self.ln,
-                    self.cl,
-                    format!("Unexpected character '{}'", char),
-                    None,
-                );
+                self.consume();
+            } else if c == ';' {
+                tokens.push(Token {
+                    line: self.ln,
+                    column: self.cl,
+                    token_type: TokenType::Semicolon,
+                    value: None,
+                });
+                self.consume();
+            } else if c == '-' {
+                self.consume(); // consume the hyphen
+                // consume again for the next character
+                if let Some(next_char) = self.consume() {
+                    if next_char == '>' {
+                        tokens.push(Token {
+                            line: self.ln,
+                            column: self.cl,
+                            token_type: TokenType::ThinArrow,
+                            value: None,
+                        });
+                        self.consume(); // consume the '>'
+                    } else {
+                        self.error_handler.err(
+                            self.ln,
+                            self.cl,
+                            format!("Unexpected character after hyphen sign: '{}'", c),
+                            None
+                        );
+                        self.consume(); // consume the '-'
+                    }
+                }
             }
         }
+
         tokens
     }
 }

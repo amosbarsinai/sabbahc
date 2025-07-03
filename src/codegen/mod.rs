@@ -1,4 +1,4 @@
-use crate::{err::ErrorHandler, structure::{AstNodeType::*, AstNodeValue, Scope}};
+use crate::{err::ErrorHandler, structure::{AstNodeType, AstNodeValue, Scope}};
 use std::process::exit;
 
 /// Ooh, my first documentation - I'm excited!
@@ -80,51 +80,35 @@ impl<'a> CodeGenerator<'a> {
         }
     }
     pub fn out(&mut self) -> String {
-        let mut generated: Generated = Generated::new();
-        let mut i = 0;
-        while i < self.input.children.len() {
-            let statement = &self.input.children[i];
-            let mut j = 0;
-            while j < statement.children.len() {
-                let mut node = &statement.children[j];
+        let mut generated = Generated::new();
+
+        let i: usize = 0;
+        while let Some(statement) = self.input.children.get(i) {
+            let j: usize = 0;
+            while let Some(node) = statement.children.get(j) {
                 match node.node_type {
-                    FunctionKeyword => {
-                        // None value
-                        j += 1; // consume
-                        if let Some(value) = statement.children.get(j) {
-                            node = value;
-                        } else {
-                            self.error_handler.err(
-                                node.line,
-                                node.column,
-                                "Unexpected EOF (expected function identifier)".to_string(),
-                                None
-                            )
-                        }
-                        let function_name = match &node.value {
-                            Some(AstNodeValue::FunctionIdent(name)) => name,
-                            _ => {
-                                self.error_handler.err(
+                    AstNodeType::FunctionIdent => {
+                        // get full function
+                        j += 1;
+                        let function_name: String;
+                        if let Some(AstNodeType::FunctionIdent) = statement.children.get(j) {
+                            j += 1;
+                            if let Some(AstNodeValue::FunctionIdent(name)) = statement.children.get(j) {
+                                function_name = name;
+                            } else {
+                                self.error_handler.comperr(
                                     node.line,
                                     node.column,
-                                    "Expected function identifier after function keyword".to_string(),
-                                    None,
+                                    String::from("expected function identifier node to have value"),
+                                    String::from("Please report this error to GitHub: https://github.com/AmosBarSinai/sabbahc/issues")
                                 );
-                                &String::new() // never used
                             }
-                        };
-                        self.indent += 4;
-                        generated.text.entries.push(format!("{}{}:\n", " ".repeat(self.indent as usize), function_name));
-                    }
-                    _ => {
-                        println!("You forgot a branch!");
-                        exit(1);
+                        }
                     }
                 }
-                j += 1;
             }
-            i += 1;
         }
+
         generated.to_string()
     }
 }
